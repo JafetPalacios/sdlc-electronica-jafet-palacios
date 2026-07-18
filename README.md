@@ -1,1 +1,5 @@
-# sdlc-electronica-jafet-palacios
+Mi nombre es Jafet de los Angeles Palacios Guatzozón
+Actualmente, soy estudiante de último semestre de Ingeniería Biomédica y pasante en el laboratorio de Robótica Médica y Bioseñales del Instituto Politecnico Nacional (IPN). Previamente, inicié estudiando Instrumentación Electrónica pero cambié de carrera en 2023. 
+Tengo experiencia en electrónica y programación. He trabajado con microcontroladores, sensores, comunicación de datos, desarrollo de software y lenguajes como C, C#, Python y un poco de Java. También he participado en proyectos relacionados con instrumentación biomédica, análisis de señales, sistemas IoT y visualización 3D. 
+Ademas de mi experiencia técnica, he desarrollado habilidades de liderazgo y organización como presidenta de la Rama Estudiantil IEEE FIE-UV, he participando en la coordinación de eventos académicos, impartido talleres, concursos tecnológicos y actividades de divulgación científica. 
+Del programa EDSIA espero fortalecer mis conocimientos en programación, pruebas, documentación y desarrollo estructurado de proyectos. Mi objetivo es mejorar mi capacidad para crear código más confiable, seguro y eficientes, además de adquirir experiencia práctica que pueda aplicar en proyectos profesionales y de investigación.
