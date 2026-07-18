@@ -56,7 +56,7 @@ La solución inicial concentraba demasiados conceptos y dificultaba comprender l
 
 
 
-## Entrada 2: Aplicación de SRP, OCP y LSP al dominio de sensores
+## Entrada 2: Aplicación de SRP, OCP, LSP, ISP y DIP al dominio de sensores
 
 **Fecha:** 18 de julio de 2026
 
@@ -112,6 +112,79 @@ La IA generó:
 * Una clase `HumidityPercentageSensor` que devuelve un porcentaje válido.
 * Una función `read_percentage()` que acepta sensores compatibles y valida que la lectura se encuentre entre 0 y 100.
 
+#### ISP
+
+Ejemplo incorrecto: 
+Le pedí una interfaz demasiado grande que exige leer, calibrar y conectarse, pero con un sensor que solo puedan leer
+La IA creó un protocolo grande llamado BadSensorInterface que exigía tres métodos:
+
+* read()
+* calibrate()
+* connect()
+
+También se creó BadBasicTemperatureSensor, que únicamente podía leer, pero estaba obligado a implementar calibrate() y connect() lanzando NotImplementedError.
+
+Ejemplo correcto: 
+Pedí que ahora separara la interfáz para para solo llamarlas dependiendo del sensor. Y que creara 2 sensores: uno que solo leyera y otro que hiciera todo
+La IA dividió la interfaz grande en tres protocolos:
+
+* ReadableSensor
+* CalibratableSensor
+* ConnectableSensor
+
+Tambien creó:
+
+BasicTemperatureSensor, que solo implementa lectura.
+AdvancedTemperatureSensor, que implementa lectura, calibración y conexión.
+
+También se propuso funciones consumidoras específicas:
+
+* read_sensor()
+* calibrate_sensor()
+* connect_sensor()
+
+Cada función depende únicamente del protocolo que necesita.
+
+
+#### DIP
+
+Ejemplo incorrecto:
+Solicité a la IA un ejmplo completo. Decidí conservar el ejemplo incorrecto que me dió porque demuestra que una clase puede funcionar, pero no por eso es una solución corecta.
+La IA creó BadDataProcessor, que construye directamente una instancia de:
+
+JsonFileRepository
+
+Esto une al procesador con una implementación concreta de almacenamiento.
+
+Ejemplo correcto:
+Solicité a la IA tecnicas para hacer el ejercicio de manera correcta y me dio opciones como:
+
+* Inyección por método
+* Inyección por constructor
+* Inyección mediante atributo o setter
+* Pasar una función en lugar de un objeto
+* Patrón Strategy
+* Factory
+* Registro de implementaciones
+* Service Locator
+
+Decidí utilizar inyección por constructor en lugar de crear el repositorio dentro de DataProcessor porque la dependencia queda visible y puede elegirse desde el exterior y esto facilita:
+
+* cambiar implementaciones;
+* probar el procesador;
+* utilizar repositorios simulados;
+* evitar acoplamiento con una clase concreta.
+
+La IA creó un protocolo DataRepository con el método save(value: float) -> str
+También se creó dos repositorios concretos
+
+* MemoryRepository
+* JsonFileRepository
+
+Finalmente, DataProcessor recibió el repositorio mediante el constructor:
+DataProcessor(repository)
+
+
 ### Mi decisión sobre la forma de trabajo
 
 Decidí desarrollar cada principio por separado y no escribir toda la solución de una vez.
@@ -130,28 +203,32 @@ También evitó mezclar conceptos diferentes y facilitó localizar errores duran
 
 ### Pruebas realizadas
 
-Se crearon seis tests:
+Se crearon 10 tests:
 
 * Dos para SRP.
 * Dos para OCP.
 * Dos para LSP.
+* Dos para ISP.
+* Dos para DIP.
 
 Los tests verificaron:
 
 * que el ejemplo incorrecto de SRP leyera y guardara en una misma operación;
 * que el diseño correcto separara lectura y persistencia;
-* que el formateador incorrecto dependiera de tipos conocidos;
+* que el formateador incorrecto para OCP dependiera de tipos conocidos;
 * que el diseño correcto aceptara un formateador nuevo;
 * que el sensor incorrecto de LSP rompiera el contrato de porcentaje;
-* que la clase correcta pudiera sustituir a la clase base.
+* que la clase correcta pudiera sustituir a la clase base;
+* que en el ejemplo incorrecto de ISP el sensor puede leer, pero falla al intentar calibrarse o conectarse;
+* que el sensor básico puede utilizarse únicamente mediante un contrato, mientras que el sensor avanzado puede utilizarse con los tres contratos;
+* que el ejemplo incorrecto de DIP siempre utiliza el repositorio JSON concreto;
+* que el diseño correcto pueda trabajar con MemoryRepository y JsonFileRepository sin modificar su implementación.
 
 ### Verificaciones finales
 
 La actividad terminó con:
 
-```text
-6 tests aprobados
+todos los tests aprobados
 mypy sin errores
 ruff sin errores
-```
-
+ 
