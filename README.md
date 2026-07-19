@@ -19,6 +19,6 @@ L - La sustitución de Liskov se cumple porque `ModbusParser` y `NMEAParser` pue
 
 I - La segregación de interfaces evita que las clases dependan de operaciones que no necesitan. En el driver, el dispositivo únicamente requiere que el parser proporcione el método `parse()`.
 
-L - La inversión de dependencias se aplicó al inyectar la configuración y el parser en `UartDevice`. La clase no crea internamente un parser concreto, por lo que depende de una abstracción y no directamente de Modbus o NMEA.
+D - La inversión de dependencias se aplicó al inyectar la configuración y el parser en `UartDevice`. La clase no crea internamente un parser concreto, por lo que depende de una abstracción y no directamente de Modbus o NMEA.
 
 La principal ventaja observada es que el sistema resulta más fácil de probar y extender. Cada clase puede validarse de forma aislada y es posible incorporar nuevos protocolos o mecanismos de persistencia con cambios mínimos.
