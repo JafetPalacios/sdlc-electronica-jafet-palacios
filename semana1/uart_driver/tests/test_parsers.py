@@ -1,25 +1,27 @@
 import pytest
 
+from typing import Any, cast
 from semana1.uart_driver.parsers import (
     MessageParser,
     ModbusParser,
     NMEAParser,
 )
 
-def test_message_parser_cannot_be_instantiated() -> None:                               # Debe fallar porque parse() es abstracto
-    # Verificamos que la clase abstracta no pueda crearse directamente.
+def test_message_parser_cannot_be_instantiated() -> None:
+    parser_class = cast(Any, MessageParser)                             # Convertimos la clase abstracta a Any para probar el error en ejecución
+
     with pytest.raises(TypeError):
-        MessageParser()
+        parser_class()
 
 
-def test_incomplete_parser_cannot_be_instantiated() -> None:                            # Hereda de MessageParser pero no implementa parse() Por eso tampoco puede crearse.
-    # Creamos una clase hija que no implementa el método obligatorio.
-    class IncompleteParser(MessageParser):
+def test_incomplete_parser_cannot_be_instantiated() -> None:
+    class IncompleteParser(MessageParser):                              # Creamos una clase hija que no implementa el método obligatorio
         pass
 
-    # Verificamos que siga siendo abstracta.
+    parser_class = cast(Any, IncompleteParser)                          # Convertimos la clase a Any para probar el error en ejecución
+
     with pytest.raises(TypeError):
-        IncompleteParser()
+        parser_class()
 
 
 def test_concrete_parser_can_be_instantiated() -> None:                                # Implementa parse() y por eso puede crearse
