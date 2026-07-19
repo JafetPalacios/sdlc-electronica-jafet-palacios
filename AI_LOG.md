@@ -232,3 +232,42 @@ todos los tests aprobados
 mypy sin errores
 ruff sin errores
  
+
+
+
+ ## Entrada 3: Driver UART modernizado con SOLID
+
+### Prompt utilizado
+
+Solicité apoyo para reimplementar un driver UART de C en Python moderno aplicando SOLID. El entregable debía incluir una configuración UART inmutable y validada, parsers Modbus y NMEA mediante una clase abstracta, un dispositivo con dependencias inyectadas, persistencia JSON Lines y al menos tres pruebas por clase.
+
+### Qué produjo la IA
+
+La IA propuso una estructura modular dentro de `semana1/uart_driver/`, separando las responsabilidades en los archivos `config.py`, `parsers.py`, `device.py` y `recorder.py`.
+
+También generó:
+
+* La dataclass congelada `UartConfig`.
+* La clase abstracta `MessageParser`.
+* Los parsers `ModbusParser` y `NMEAParser`.
+* La clase `UartDevice` con inyección de configuración y parser.
+* La clase `JsonLinesRecorder`.
+* Pruebas unitarias para cada componente.
+* Comandos para ejecutar pytest, Ruff, mypy y cobertura.
+
+### Mi decisión
+
+Decidí conservar la separación propuesta porque cada componente tiene una responsabilidad concreta y puede probarse de manera independiente.
+
+También decidí que `UartDevice` no accediera todavía a un puerto serial real. En esta primera versión recibe directamente mensajes en formato `bytes`, lo que permite validar la arquitectura y los protocolos sin depender de hardware ni de una biblioteca como `pyserial`.
+
+Para Modbus implementé una interpretación simplificada de la trama: dirección, código de función y datos. No incorporé todavía la validación CRC porque el objetivo principal del ejercicio era aplicar diseño orientado a objetos y principios SOLID.
+
+Para NMEA decidí extraer el tipo de sentencia, sus campos y el checksum opcional, sin verificar matemáticamente el checksum en esta etapa.
+
+### Por qué tomé esta decisión
+
+Esta solución cumple el alcance solicitado y mantiene el código sencillo, comprobable y extensible. Posteriormente se podría agregar una clase encargada del puerto serial, validación CRC de Modbus, comprobación del checksum NMEA o nuevos protocolos sin modificar el núcleo de `UartDevice`.
+
+Durante las verificaciones también se detectó que PowerShell interpretaba el símbolo `$` de las sentencias NMEA como una variable. Para las pruebas manuales se utilizó su representación hexadecimal `\x24`. Además, las pruebas de clases abstractas se ajustaron mediante `cast(Any, ...)` para que pudieran comprobar el error en tiempo de ejecución sin generar errores en mypy.
+
