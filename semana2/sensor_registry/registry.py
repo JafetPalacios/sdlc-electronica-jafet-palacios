@@ -29,9 +29,16 @@ class SensorRegistry:
         except KeyError as error:
             raise SensorNotFoundError(identifier) from error
 
+    def remove(self, identifier: str) -> None:
+        try:
+            del self._sensors[identifier]
+        except KeyError as error:
+            raise SensorNotFoundError(identifier) from error
+
     def count(self) -> int:
         return len(self._sensors)
 
     def _ensure_identifier_is_available(self, identifier: str) -> None:
         if identifier in self._sensors:
             raise DuplicateSensorError(identifier)
+
