@@ -26,3 +26,7 @@ class SensorRegistry:
 
     def count(self) -> int:
         return len(self._sensors)
+
+    def _ensure_identifier_is_available(self, identifier: str) -> None:
+        if identifier in self._sensors:
+            raise DuplicateSensorError(identifier)
