@@ -3,6 +3,7 @@
 from semana2.sensor_registry.registry import (
     DuplicateSensorError,
     Sensor,
+    SensorNotFoundError,
     SensorRegistry,
 )
 
@@ -40,4 +41,14 @@ def test_register_rejects_duplicate_identifier() -> None:
     assert registry.count() == 1
     assert registry.get("TEMP-001") == original_sensor
 
+
+
+
+def test_get_raises_error_when_sensor_does_not_exist() -> None:
+    registry = SensorRegistry()
+
+    with pytest.raises(SensorNotFoundError):
+        registry.get("TEMP-999")
+
+    assert registry.count() == 0
 
