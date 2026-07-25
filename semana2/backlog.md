@@ -130,3 +130,32 @@ Característica: Consulta de sensores inexistentes
     Y el registro de sensores debe continuar vacío
 ```
 
+
+---
+
+## US-05: Eliminar un sensor registrado
+
+**Como** operador del sistema,
+**quiero** eliminar un sensor mediante su identificador,
+**para** retirar del registro sensores que ya no deben administrarse.
+
+### Prioridad
+
+Media
+
+### Estimación
+
+3 story points
+
+### Criterios de aceptación
+
+```gherkin
+Característica: Eliminación de sensores
+
+  Escenario: Eliminar un sensor existente
+    Dado que el registro contiene únicamente un sensor con identificador "TEMP-001" y nombre "Sensor de temperatura"
+    Cuando se elimina el sensor con identificador "TEMP-001"
+    Entonces una consulta posterior por "TEMP-001" debe generar un error de sensor no encontrado
+    Y la cantidad de sensores registrados debe ser 0
+```
+
