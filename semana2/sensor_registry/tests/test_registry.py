@@ -52,3 +52,19 @@ def test_get_raises_error_when_sensor_does_not_exist() -> None:
 
     assert registry.count() == 0
 
+
+
+def test_remove_deletes_existing_sensor() -> None:
+    registry = SensorRegistry()
+    sensor = Sensor(
+        identifier="TEMP-001",
+        name="Sensor de temperatura",
+    )
+    registry.register(sensor)
+
+    registry.remove("TEMP-001")
+
+    with pytest.raises(SensorNotFoundError):
+        registry.get("TEMP-001")
+
+    assert registry.count() == 0
