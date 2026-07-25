@@ -1,13 +1,13 @@
 """Pruebas del modelo de lecturas ambientales."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from semana2.eval1.sensor_reading import SensorReading
 
 
 def test_sensor_reading_preserves_environmental_data() -> None:
     """Verificamos que una lectura conserve todos los datos recibidos."""
-    captured_at = datetime(2026, 7, 25, 12, 0, tzinfo=timezone.utc)
+    captured_at = datetime(2026, 7, 25, 12, 0, tzinfo=UTC)
 
     reading = SensorReading(
         sensor_id="SENSOR-01",
