@@ -101,3 +101,32 @@ Característica: Consulta de sensores
     Y el sensor consultado debe tener el nombre "Sensor de humedad"
 ```
 
+
+---
+
+## US-04: Informar cuando un sensor no existe
+
+**Como** operador del sistema,
+**quiero** recibir un error específico cuando consulte un identificador inexistente,
+**para** distinguir entre un sensor no registrado y un fallo del sistema.
+
+### Prioridad
+
+Alta
+
+### Estimación
+
+2 story points
+
+### Criterios de aceptación
+
+```gherkin
+Característica: Consulta de sensores inexistentes
+
+  Escenario: Consultar un identificador no registrado
+    Dado que el registro de sensores está vacío
+    Cuando se consulta el sensor con identificador "TEMP-999"
+    Entonces el sistema debe generar un error de sensor no encontrado
+    Y el registro de sensores debe continuar vacío
+```
+
