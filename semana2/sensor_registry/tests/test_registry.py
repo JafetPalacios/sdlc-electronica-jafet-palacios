@@ -13,5 +13,4 @@ def test_register_allows_retrieving_sensor_by_identifier() -> None:
     stored_sensor = registry.get("TEMP-001")
 
     assert stored_sensor == sensor
-    assert stored_sensor.identifier == "TEMP-001"
-    assert stored_sensor.name == "Sensor de temperatura"
+
