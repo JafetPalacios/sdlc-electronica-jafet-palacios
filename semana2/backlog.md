@@ -42,3 +42,33 @@ Característica: Registro de sensores
     Y el sensor consultado debe conservar el nombre "Sensor de temperatura"
 ```
 
+
+---
+
+## US-02: Rechazar identificadores duplicados
+
+**Como** operador del sistema,
+**quiero** impedir el registro de dos sensores con el mismo identificador,
+**para** evitar información ambigua o sobrescrita.
+
+### Prioridad
+
+Alta
+
+### Estimación
+
+3 story points
+
+### Criterios de aceptación
+
+```gherkin
+Característica: Validación de identificadores de sensores
+
+  Escenario: Rechazar un sensor con identificador duplicado
+    Dado que existe un sensor con identificador "TEMP-001" y nombre "Sensor principal"
+    Cuando se intenta registrar otro sensor con identificador "TEMP-001" y nombre "Sensor secundario"
+    Entonces el sistema debe generar un error de identificador duplicado
+    Y la cantidad de sensores registrados debe continuar siendo 1
+    Y la consulta por "TEMP-001" debe devolver el sensor con nombre "Sensor principal"
+```
+
