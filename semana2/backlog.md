@@ -72,3 +72,32 @@ Característica: Validación de identificadores de sensores
     Y la consulta por "TEMP-001" debe devolver el sensor con nombre "Sensor principal"
 ```
 
+
+---
+
+## US-03: Consultar un sensor por identificador
+
+**Como** operador del sistema,
+**quiero** consultar un sensor mediante su identificador único,
+**para** revisar su información registrada cuando sea necesario.
+
+### Prioridad
+
+Alta
+
+### Estimación
+
+2 story points
+
+### Criterios de aceptación
+
+```gherkin
+Característica: Consulta de sensores
+
+  Escenario: Consultar un sensor existente
+    Dado que existe un sensor con identificador "HUM-001" y nombre "Sensor de humedad"
+    Cuando se consulta el sensor mediante el identificador "HUM-001"
+    Entonces la consulta debe devolver un sensor con identificador "HUM-001"
+    Y el sensor consultado debe tener el nombre "Sensor de humedad"
+```
+
