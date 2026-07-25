@@ -1,6 +1,10 @@
 ﻿from dataclasses import dataclass
 
 
+class DuplicateSensorError(ValueError):
+    pass
+
+
 @dataclass(frozen=True)
 class Sensor:
     identifier: str
@@ -12,7 +16,13 @@ class SensorRegistry:
         self._sensors: dict[str, Sensor] = {}
 
     def register(self, sensor: Sensor) -> None:
+        if sensor.identifier in self._sensors:
+            raise DuplicateSensorError(sensor.identifier)
+
         self._sensors[sensor.identifier] = sensor
 
     def get(self, identifier: str) -> Sensor:
         return self._sensors[identifier]
+
+    def count(self) -> int:
+        return len(self._sensors)
