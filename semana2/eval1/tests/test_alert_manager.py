@@ -1,11 +1,14 @@
 """Pruebas del administrador de alertas"""
 
+from pathlib import Path
+
 import pytest
 
 from semana2.eval1.alert_manager import (
     AlertManager,
     AlertStrategy,
     ConsoleAlertStrategy,
+    FileAlertStrategy,
 )
 from semana2.eval1.anomaly_detector import Anomaly, AnomalyType
 
@@ -56,4 +59,22 @@ def test_console_strategy_writes_formatted_alert(
     assert captured.out == (
         "ALERTA | sensor=SENSOR-01 | tipo=temperature | "
         "valor=35.1 | umbral=35.0\n"
+    )
+
+def test_file_strategy_appends_formatted_alert(tmp_path: Path) -> None:
+    """Verificamos que la estrategia escriba una alerta en un archivo"""
+    alert_file = tmp_path / "alerts.log"
+    strategy = FileAlertStrategy(file_path=alert_file)
+    anomaly = Anomaly(
+        sensor_id="SENSOR-02",
+        anomaly_type=AnomalyType.HUMIDITY,
+        measured_value=80.1,
+        threshold=80.0,
+    )
+
+    strategy.send(anomaly)
+
+    assert alert_file.read_text(encoding="utf-8") == (
+        "ALERTA | sensor=SENSOR-02 | tipo=humidity | "
+        "valor=80.1 | umbral=80.0\n"
     )
