@@ -1,6 +1,7 @@
 """Administración de alertas mediante estrategias intercambiables"""
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 from semana2.eval1.anomaly_detector import Anomaly
 
@@ -24,6 +25,27 @@ class ConsoleAlertStrategy(AlertStrategy):
             f"valor={anomaly.measured_value} | "
             f"umbral={anomaly.threshold}"
         )
+
+
+class FileAlertStrategy(AlertStrategy):
+    """Guarda alertas en un archivo de texto"""
+
+    def __init__(self, file_path: Path) -> None:
+        """Configura el archivo donde se guardarán las alertas"""
+        self._file_path = file_path
+
+    def send(self, anomaly: Anomaly) -> None:
+        """Agrega una alerta formateada al archivo"""
+        message = (
+            f"ALERTA | sensor={anomaly.sensor_id} | "
+            f"tipo={anomaly.anomaly_type.value} | "
+            f"valor={anomaly.measured_value} | "
+            f"umbral={anomaly.threshold}"
+        )
+
+        # Abrimos en modo append para conservar las alertas anteriores
+        with self._file_path.open("a", encoding="utf-8") as file:
+            file.write(message + "\n")
 
 
 class AlertManager:
