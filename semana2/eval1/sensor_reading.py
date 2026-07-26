@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 
-@dataclass
+@dataclass(frozen=True)
 class SensorReading:
     """Representa una lectura de temperatura y humedad.
 
