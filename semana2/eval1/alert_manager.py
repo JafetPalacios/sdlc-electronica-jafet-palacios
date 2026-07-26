@@ -13,6 +13,19 @@ class AlertStrategy(ABC):
         """Envía una anomalía mediante un mecanismo específico"""
 
 
+class ConsoleAlertStrategy(AlertStrategy):
+    """Envía alertas mediante la salida estándar"""
+
+    def send(self, anomaly: Anomaly) -> None:
+        """Escribe una alerta formateada en consola"""
+        print(
+            f"ALERTA | sensor={anomaly.sensor_id} | "
+            f"tipo={anomaly.anomaly_type.value} | "
+            f"valor={anomaly.measured_value} | "
+            f"umbral={anomaly.threshold}"
+        )
+
+
 class AlertManager:
     """Delega el envío de alertas a una estrategia inyectada"""
 
