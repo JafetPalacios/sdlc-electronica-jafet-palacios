@@ -50,4 +50,14 @@ class AnomalyDetector:
                 )
             )
 
+        if reading.humidity > self._humidity_threshold:
+            anomalies.append(
+                Anomaly(
+                    sensor_id=reading.sensor_id,
+                    anomaly_type=AnomalyType.HUMIDITY,
+                    measured_value=reading.humidity,
+                    threshold=self._humidity_threshold,
+                )
+            )
+
         return tuple(anomalies)
