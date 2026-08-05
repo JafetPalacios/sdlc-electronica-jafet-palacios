@@ -1,9 +1,15 @@
+from __future__ import annotations
+
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
+
+if TYPE_CHECKING:
+    from app.models.reading import Reading
 
 
 # Representa una tabla
@@ -36,3 +42,8 @@ class Sensor(Base):
         server_default=func.now(),
         nullable=False,
     )
+
+    readings: Mapped[list[Reading]] = relationship(
+    back_populates="sensor",
+)
+
