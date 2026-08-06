@@ -1,33 +1,44 @@
-# Este código es el contrato: Todo reposotorio debe i mplementar estas operaciones
-# Si la base de datos llega a cambiar, esto no cambiará, porque el contrato se mantiene
 from typing import Protocol
 
 from app.models import Sensor
 
 
-#Define las operaciones de persistencia disponibles para sensores
+# Contrato de persistencia para sensores
+# Definimos las operaciones que cualquier repositorio de sensores debe implementar
+# Mantenemos este contrato estable aunque cambie la base de datos
+# Esto permite que los servicios dependan de una interfaz y no de SQLAlchemy
 class SensorRepository(Protocol):
 
-    def create(self, sensor: Sensor) -> Sensor:                 # Guarda un nuevo sensor
-        
-        ...
-
-    def get_by_id(self, sensor_id: int) -> Sensor | None:       # Busca un sensor por su identificador interno
+    # Operaciones de creación: Registramos un sensor nuevo y devolvemos su estado persistido
+    def create(self, sensor: Sensor) -> Sensor:
 
         ...
 
-    def get_by_code(self, code: str) -> Sensor | None:          # Busca un sensor por su código público
+    # Operaciones de consulta individual: Buscamos sensores mediante su identificador interno o su código público
+    def get_by_id(self, sensor_id: int) -> Sensor | None:               # Identificador interno
 
         ...
 
-    def list(self) -> list[Sensor]:                             # Devuelve todos los sensores almacenados
+    def get_by_code(self, code: str) -> Sensor | None:                  # Código público
 
         ...
 
-    def update(self, sensor: Sensor) -> Sensor:                 # Persiste los cambios realizados sobre un sensor
+    # Operaciones de consulta paginada: Recuperamos una colección limitada de sensores
+    def list(
+        self,
+        *,
+        limit: int = 50,                                                # limit controla la cantidad máxima de resultados
+        offset: int = 0,                                                # offset indica cuántos registros omitimos desde el inicio
+    ) -> list[Sensor]:
 
         ...
 
-    def delete(self, sensor: Sensor) -> None:                   # Elimina un sensor almacenado
+    # Operaciones de actualización: Persistimos los cambios realizados previamente sobre un sensor existente y devolvemos el sensor con su estado definitivo después de guardarlo
+    def update(self, sensor: Sensor) -> Sensor:
+
+        ...
+
+    # Operaciones de eliminación: Eliminamos de forma definitiva un sensor almacenado
+    def delete(self, sensor: Sensor) -> None:
 
         ...

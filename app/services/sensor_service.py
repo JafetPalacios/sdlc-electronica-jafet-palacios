@@ -1,36 +1,108 @@
+from app.exceptions import (
+    SensorCodeConflictError,
+    SensorHasReadingsError,
+    SensorNotFoundError,
+)
 from app.models import Sensor
 from app.repositories.sensor_repository import SensorRepository
-from app.schemas import SensorCreate
+from app.schemas import SensorCreate, SensorUpdate
 
 
-# Contiene la lógica de negocio relacionada con los sensores
+# Servicio de aplicación para sensores
+# Concentramos aquí las reglas de negocio relacionadas con los sensores
+# Coordinamos el repositorio sin depender directamente de FastAPI o SQLAlchemy
+# Esto permite reutilizar y probar la lógica de negocio de forma independiente
 class SensorService:
-   
-    # Guardamos el repositorio sin importar cómo persista los datos
-    def __init__(self, repository: SensorRepository) -> None:
-        
-        self._repository = repository
+    # Inicialización del servicio
+    def __init__(self, repository: SensorRepository) -> None:                                           # Recibimos el repositorio mediante el constructor
 
-    # Crea un nuevo sensor validando que el código no exista
-    def create_sensor(self, sensor_data: SensorCreate) -> Sensor:
-        
-        existing_sensor = self._repository.get_by_code(sensor_data.code)        # Verificamos si ya existe un sensor con el mismo código
+        self._repository = repository                                                                   # Conservamos el contrato del repositorio sin conocer cómo persiste los datos
 
-        if existing_sensor is not None:
-            raise ValueError("Ya existe un sensor con ese código")
+    # Creación de sensores
+    def create_sensor(self, sensor_data: SensorCreate) -> Sensor:                                       # Registramos sensores nuevos únicamente cuando su código público está disponible
 
-        # Construimos el modelo de dominio a partir del schema recibido
-        sensor = Sensor(
+        existing_sensor = self._repository.get_by_code(                                                 # Consultamos si ya existe un sensor con el código recibido
+            sensor_data.code,
+        )
+
+        if existing_sensor is not None:                                                                 # Interrumpimos la operación cuando el código ya está registrado
+            raise SensorCodeConflictError(sensor_data.code)
+
+        sensor = Sensor(                                                                                # Construimos la entidad ORM con los datos validados por Pydantic
             code=sensor_data.code,
             name=sensor_data.name,
             sensor_type=sensor_data.sensor_type,
             unit=sensor_data.unit,
         )
 
-        return self._repository.create(sensor)                                  # Delegamos la persistencia al repositorio
+        return self._repository.create(sensor)                                                          # Delegamos la inserción y recuperación del estado final al repositorio
 
-    
-    # Obtiene todos los sensores registrados
-    def list_sensors(self) -> list[Sensor]:
-        
-        return self._repository.list()                                          # Delegamos la consulta al repositorio
+    # Consulta paginada
+    def list_sensors(                                                                                   # Recuperamos una colección limitada de sensores
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Sensor]:
+
+        return self._repository.list(                                                                   # Enviamos al repositorio el límite y el desplazamiento solicitados
+            limit=limit,
+            offset=offset,
+        )
+
+    # Consulta individual
+    def get_sensor(self, sensor_id: int) -> Sensor:                                                     # Recuperamos un sensor concreto mediante su identificador interno
+                                                                                                        # Transformamos la ausencia del registro en una excepción de dominio
+
+        sensor = self._repository.get_by_id(sensor_id)                                                  # Consultamos el repositorio sin depender de detalles HTTP
+
+        if sensor is None:                                                                              # Informamos de forma explícita cuando el sensor no existe
+            raise SensorNotFoundError(sensor_id)
+
+        return sensor
+
+    # Actualización de sensores
+    def update_sensor(                                                                                  # Modificamos únicamente los campos enviados explícitamente por el cliente
+        self,                                                                                           # Conservamos sin cambios cualquier campo omitido en la petición PATCH
+        sensor_id: int,
+        sensor_data: SensorUpdate,
+    ) -> Sensor:
+
+        sensor = self._repository.get_by_id(sensor_id)                                                  # Recuperamos la entidad antes de intentar modificarla
+
+        if sensor is None:                                                                              # Detenemos la operación cuando el identificador no corresponde a un sensor
+            raise SensorNotFoundError(sensor_id)
+
+        update_data = sensor_data.model_dump(                                                           # Extraemos únicamente los campos incluidos en la petición
+            exclude_unset=True,                                                                         # exclude_unset evita sobrescribir valores que el cliente no envió
+        )
+
+        new_code = update_data.get("code")                                                              # Obtenemos el nuevo código cuando forma parte de la actualización
+
+        if new_code is not None and new_code != sensor.code:                                            # Validamos la unicidad únicamente cuando el código realmente cambia
+            existing_sensor = self._repository.get_by_code(new_code)
+
+            if existing_sensor is not None:                                                             # Impedimos asignar un código que ya pertenece a otro sensor
+                raise SensorCodeConflictError(new_code)
+
+        for field_name, field_value in update_data.items():                                             # Aplicamos dinámicamente cada modificación permitida por el esquema
+            setattr(
+                sensor,
+                field_name,
+                field_value,
+            )
+
+        return self._repository.update(sensor)                                                          # Delegamos la confirmación de cambios y la recarga al repositorio
+
+    # Eliminación de sensores
+    def delete_sensor(self, sensor_id: int) -> None:                                                    # Eliminamos un sensor únicamente cuando existe y no conserva lecturas
+                                                                                                        # Protegemos así la integridad de los datos históricos asociados
+        sensor = self._repository.get_by_id(sensor_id)                                                  # Recuperamos el sensor antes de solicitar su eliminación
+
+        if sensor is None:                                                                              # Evitamos ejecutar una eliminación sobre un registro inexistente
+            raise SensorNotFoundError(sensor_id)
+
+        if sensor.readings:                                                                             # Comprobamos si existen lecturas relacionadas con el sensor
+            raise SensorHasReadingsError(sensor_id)
+
+        self._repository.delete(sensor)                                                                 # Delegamos la eliminación definitiva y el commit al repositorio

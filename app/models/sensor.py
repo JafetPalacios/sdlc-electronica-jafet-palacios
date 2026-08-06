@@ -8,42 +8,55 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 
+# Importamos Reading únicamente durante la verificación de tipos
+# Evitamos así una dependencia circular durante la ejecución
 if TYPE_CHECKING:
     from app.models.reading import Reading
 
-
-# Representa una tabla
-# Existe para comunicarse con la base de datos
+# Representamos un sensor registrado dentro de SensorHub
 class Sensor(Base):
 
-    __tablename__ = "sensors"
+    __tablename__ = "sensors"                               # Definimos el nombre físico de la tabla en la base de datos
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    code: Mapped[str] = mapped_column(
+    # Identificador interno
+    id: Mapped[int] = mapped_column(                        # Usamos una clave primaria entera que SQLAlchemy genera de forma incremental
+        primary_key=True,
+    )
+
+    # Código único del sensor
+    code: Mapped[str] = mapped_column(                      # Identificamos cada sensor mediante un código que no puede repetirse
         String(50),
         unique=True,
         index=True,
         nullable=False,
     )
-    name: Mapped[str] = mapped_column(
+
+    # Nombre descriptivo
+    name: Mapped[str] = mapped_column(                      # Conservamos una etiqueta legible que facilita reconocer el sensor
         String(100),
         nullable=False,
     )
-    sensor_type: Mapped[str] = mapped_column(
+
+    # Tipo de sensor
+    sensor_type: Mapped[str] = mapped_column(               # Indicamos la magnitud o categoría medida como temperatura o humedad
         String(30),
         nullable=False,
     )
-    unit: Mapped[str] = mapped_column(
+
+    # Unidad de medida
+    unit: Mapped[str] = mapped_column(                      # Conservamos la unidad utilizada para interpretar correctamente las lecturas
         String(20),
         nullable=False,
     )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+
+    # Fecha de registro
+    created_at: Mapped[datetime] = mapped_column(           # Delegamos la generación del valor a la base de datos para mantener
+        DateTime(timezone=True),                            # un origen temporal consistente entre todos los registros
         server_default=func.now(),
         nullable=False,
     )
 
-    readings: Mapped[list[Reading]] = relationship(
-    back_populates="sensor",
-)
-
+    # Relación ORM con Reading
+    readings: Mapped[list[Reading]] = relationship(         # Permitimos acceder a todas las lecturas mediante sensor.readings
+        back_populates="sensor",                            # Mantiene sincronizada la relación inversa reading.sensor
+    )

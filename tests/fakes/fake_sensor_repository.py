@@ -2,58 +2,65 @@ from app.models import Sensor
 from app.repositories.sensor_repository import SensorRepository
 
 
-# Repositorio de sensores en memoria para pruebas
-class FakeSensorRepository(SensorRepository):
+# Repositorio falso de sensores
+# Implementamos el contrato SensorRepository utilizando una lista en memoria
+# Esta clase permite probar SensorService sin conectarnos a una base de datos real
+# Cada prueba puede crear una instancia nueva y trabajar con datos aislados
+class FakeSensorRepository(SensorRepository):                                             # Simulamos la persistencia de sensores completamente en memoria
 
-    def __init__(self) -> None:
-        
-        self._sensors: list[Sensor] = []                # Almacenamos los sensores únicamente en memoria
-        self._next_id = 1                               # Simulamos el autoincremento de la base de datos
+    # Inicialización del repositorio
+    def __init__(self) -> None:                                                           # Preparamos la colección interna y el contador utilizado para generar ids
 
+        self._sensors: list[Sensor] = []                                                  # Conservamos los sensores creados durante la ejecución de la prueba
+        self._next_id = 1                                                                 # Simulamos el comportamiento autoincremental de una base de datos
 
-    # Guarda un sensor en memoria
-    def create(self, sensor: Sensor) -> Sensor:
+    # Creación de sensores
+    def create(self, sensor: Sensor) -> Sensor:                                           # Asignamos un identificador y almacenamos el sensor dentro de la lista
 
-        print("FakeRepository.create()")
-
-        sensor.id = self._next_id                       # Simulamos el comportamiento de la base asignando un id
-        self._next_id += 1
-        self._sensors.append(sensor)
+        sensor.id = self._next_id                                                         # Asignamos el siguiente identificador disponible
+        self._next_id += 1                                                                # Incrementamos el contador para la siguiente creación
+        self._sensors.append(sensor)                                                      # Añadimos el sensor a la colección que representa la persistencia
 
         return sensor
 
-    # Busca un sensor por id
-    def get_by_id(self, sensor_id: int) -> Sensor | None:
-        
+    # Consulta individual por identificador
+    def get_by_id(self, sensor_id: int) -> Sensor | None:                                 # Recorremos la colección hasta localizar un sensor con el id solicitado
 
-        for sensor in self._sensors:
+        for sensor in self._sensors:                                                      # Comparamos el identificador solicitado con cada sensor almacenado
             if sensor.id == sensor_id:
                 return sensor
 
-        return None
+        return None                                                                       # Devolvemos None cuando no existe una coincidencia
 
+    # Consulta individual por código
+    def get_by_code(self, code: str) -> Sensor | None:                                    # Buscamos un sensor utilizando el código público que debe ser único
 
-    # Busca un sensor por código
-    def get_by_code(self, code: str) -> Sensor | None:
-
-        for sensor in self._sensors:
+        for sensor in self._sensors:                                                      # Comparamos el código solicitado con cada sensor almacenado
             if sensor.code == code:
                 return sensor
 
-        return None
+        return None                                                                       # Devolvemos None cuando el código no está registrado
 
-    # Devuelve todos los sensores
-    def list(self) -> list[Sensor]:
+    # Consulta paginada
+    def list(                                                                             # Devolvemos únicamente la sección solicitada de la colección interna
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Sensor]:
 
-        return list(self._sensors)
+        end_position = offset + limit                                                     # Calculamos la posición final a partir del desplazamiento y el límite
 
+        return list(                                                                      # Creamos una nueva lista para evitar exponer directamente la colección interna
+            self._sensors[offset:end_position]
+        )
 
-    # Actualiza un sensor existente
-    def update(self, sensor: Sensor) -> Sensor:
-       
+    # Actualización de sensores
+    def update(self, sensor: Sensor) -> Sensor:                                             # Los sensores almacenados son los mismos objetos utilizados por el servicio por ello los cambios ya están reflejados en memoria cuando llegamos aquí
+
         return sensor
 
-    # Elimina un sensor
-    def delete(self, sensor: Sensor) -> None:
+    # Eliminación de sensores
+    def delete(self, sensor: Sensor) -> None:                                               # Retiramos de la colección la misma instancia que recibió el servicio
 
-        self._sensors.remove(sensor)
+        self._sensors.remove(sensor)                                                        # Quitamos el sensor de la colección utilizada por las pruebas
