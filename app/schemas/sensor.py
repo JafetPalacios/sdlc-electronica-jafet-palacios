@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # Esquemas de entrada
@@ -70,6 +70,22 @@ class SensorUpdate(BaseModel):
         max_length=20,
         examples=["°C"],
     )
+
+    @field_validator(
+        "code",
+        "name",
+        "sensor_type",
+        "unit",
+    )
+    @classmethod
+    def reject_null_fields(cls, value: str | None) -> str:  # Rechazamos null en los campos enviados explícitamente
+
+        if value is None:
+            raise ValueError(
+                "Los campos de un sensor no pueden ser nulos"
+            )
+
+        return value
 
 
 # Esquemas de salida

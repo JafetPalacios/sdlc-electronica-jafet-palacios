@@ -1,7 +1,10 @@
+from app.domain.sensor_rules import SENSOR_RULES
 from app.exceptions import (
+    InvalidSensorUnitError,
     SensorCodeConflictError,
     SensorHasReadingsError,
     SensorNotFoundError,
+    UnsupportedSensorTypeError,
 )
 from app.models import Sensor
 from app.repositories.sensor_repository import SensorRepository
@@ -18,8 +21,34 @@ class SensorService:
 
         self._repository = repository                                                                   # Conservamos el contrato del repositorio sin conocer cómo persiste los datos
 
+
+    # Validación de reglas físicas
+    def _validate_sensor_rule(                                                                          # Comprobamos que el tipo de sensor exista dentro del catálogo y que la unidad enviada corresponda con la unidad definida
+        self,
+        sensor_type: str,
+        unit: str,
+    ) -> None:
+
+        rule = SENSOR_RULES.get(sensor_type)                                                            # Buscamos la configuración asociada al tipo recibido
+
+        if rule is None:                                                                                # Rechazamos tipos que no forman parte del catálogo
+            raise UnsupportedSensorTypeError(sensor_type)
+
+        if unit != rule.unit:                                                                           # Rechazamos unidades incompatibles con el tipo seleccionado
+            raise InvalidSensorUnitError(
+                sensor_type=sensor_type,
+                received_unit=unit,
+                expected_unit=rule.unit,
+            )
+
+
     # Creación de sensores
     def create_sensor(self, sensor_data: SensorCreate) -> Sensor:                                       # Registramos sensores nuevos únicamente cuando su código público está disponible
+
+        self._validate_sensor_rule(                                                                     # Validamos que el tipo y la unidad pertenezcan al catálogo físico
+            sensor_type=sensor_data.sensor_type,
+            unit=sensor_data.unit,
+        )
 
         existing_sensor = self._repository.get_by_code(                                                 # Consultamos si ya existe un sensor con el código recibido
             sensor_data.code,
@@ -75,6 +104,22 @@ class SensorService:
 
         update_data = sensor_data.model_dump(                                                           # Extraemos únicamente los campos incluidos en la petición
             exclude_unset=True,                                                                         # exclude_unset evita sobrescribir valores que el cliente no envió
+        )
+
+        # Construimos la combinación final que tendría el sensor
+        final_sensor_type = update_data.get(                                                            # Usamos los valores actuales cuando el cliente no envía un cambio
+            "sensor_type",
+            sensor.sensor_type,
+        )
+        final_unit = update_data.get(
+            "unit",
+            sensor.unit,
+        )
+
+        # Validamos la combinación final antes de modificar la entidad
+        self._validate_sensor_rule(
+            sensor_type=final_sensor_type,
+            unit=final_unit,
         )
 
         new_code = update_data.get("code")                                                              # Obtenemos el nuevo código cuando forma parte de la actualización

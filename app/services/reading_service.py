@@ -1,8 +1,10 @@
 from datetime import datetime
 
+from app.domain.sensor_rules import SENSOR_RULES
 from app.exceptions import (
     InvalidDateRangeError,
     ReadingNotFoundError,
+    ReadingValueOutOfRangeError,
     SensorNotFoundError,
 )
 from app.models import Reading
@@ -27,6 +29,27 @@ class ReadingService:
         self._reading_repository = reading_repository                           # Conservamos el repositorio encargado de consultar y persistir lecturas
         self._sensor_repository = sensor_repository                             # Conservamos el repositorio utilizado para comprobar sensores propietarios
 
+    # Validación de valores físicos
+    def _validate_reading_value(                                                # Comprobamos que cada lectura respete el intervalo definido para el tipo del sensor propietario
+        self,
+        sensor_type: str,
+        value: float,
+    ) -> None:
+
+        rule = SENSOR_RULES.get(sensor_type)                                    # Recuperamos la regla física asociada al tipo del sensor
+
+        if rule is None:                                                        # El tipo ya fue validado al crear el sensor
+            return                                                              # Este control evita un error inesperado si existen datos antiguos
+
+        if value < rule.minimum_value or value > rule.maximum_value:            # Rechazamos valores inferiores o superiores al intervalo permitido
+            raise ReadingValueOutOfRangeError(
+                sensor_type=sensor_type,
+                value=value,
+                minimum_value=rule.minimum_value,
+                maximum_value=rule.maximum_value,
+            )
+
+
     # Creación de lecturas
     def create_reading(                                                         # Registramos nuevas mediciones únicamente para sensores existentes
         self,
@@ -38,6 +61,11 @@ class ReadingService:
 
         if sensor is None:                                                      # Interrumpimos la operación cuando el sensor propietario no existe
             raise SensorNotFoundError(sensor_id)
+
+        self._validate_reading_value(                                           # Validamos el valor usando la regla asociada al tipo del sensor
+            sensor_type=sensor.sensor_type,
+            value=reading_data.value,
+        )
 
         reading = Reading(                                                      # Construimos la entidad ORM con el sensor propietario
             sensor_id=sensor_id,                                                # El timestamp será generado por la base de datos al persistirla
@@ -105,6 +133,22 @@ class ReadingService:
         update_data = reading_data.model_dump(                                  # Extraemos solamente los campos recibidos en la petición
             exclude_unset=True,                                                 # exclude_unset evita sobrescribir valores que el cliente no envió
         )
+
+        new_value = update_data.get("value")                                    # Validamos el nuevo valor cuando forma parte de la actualización
+
+        if new_value is not None:
+            sensor = self._sensor_repository.get_by_id(                         # Recuperamos el sensor propietario para conocer su regla física
+                reading.sensor_id,
+            )
+
+            if sensor is None:                                                  # Protegemos el servicio ante datos inconsistentes en la base
+                raise SensorNotFoundError(reading.sensor_id)
+
+
+            self._validate_reading_value(                                       # Validamos el nuevo valor antes de modificar la entidad
+                sensor_type=sensor.sensor_type,
+                value=new_value,
+            )
 
         for field_name, field_value in update_data.items():                     # Aplicamos dinámicamente cada modificación permitida por el esquema
             setattr(

@@ -6,10 +6,13 @@ from fastapi.responses import JSONResponse
 from app.db import Base, engine
 from app.exceptions import (
     InvalidDateRangeError,
+    InvalidSensorUnitError,
     ReadingNotFoundError,
+    ReadingValueOutOfRangeError,
     SensorCodeConflictError,
     SensorHasReadingsError,
     SensorNotFoundError,
+    UnsupportedSensorTypeError,
 )
 from app.models import Sensor  # noqa: F401
 from app.routers.readings import router as readings_router
@@ -154,3 +157,55 @@ def health_check() -> dict[str, str]:
         "service": APP_TITLE,
         "version": APP_VERSION,
     }
+
+
+#==========[     Manejadores de errores de reglas físicas     ]==========
+# Convertimos validaciones del dominio en respuestas HTTP 422 porque los datos tienen un formato válido pero no cumplen las reglas del producto
+
+# Convertimos un tipo no admitido en una respuesta HTTP 422
+@app.exception_handler(UnsupportedSensorTypeError)
+async def handle_unsupported_sensor_type(
+    request: Request,
+    exc: UnsupportedSensorTypeError,
+) -> JSONResponse:
+
+    _ = request                                                                 # Conservamos la petición disponible para futuras tareas de trazabilidad
+
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content={
+            "detail": str(exc),
+        },
+    )
+
+# Convertimos una unidad incompatible en una respuesta HTTP 422
+@app.exception_handler(InvalidSensorUnitError)
+async def handle_invalid_sensor_unit(
+    request: Request,
+    exc: InvalidSensorUnitError,
+) -> JSONResponse:
+
+    _ = request                                                                   # Conservamos la petición disponible para futuras tareas de trazabilidad
+
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content={
+            "detail": str(exc),
+        },
+    )
+
+# Convertimos una lectura fuera de rango en una respuesta HTTP 422
+@app.exception_handler(ReadingValueOutOfRangeError)
+async def handle_reading_value_out_of_range(
+    request: Request,
+    exc: ReadingValueOutOfRangeError,
+) -> JSONResponse:
+
+    _ = request                                                                 # Conservamos la petición disponible para futuras tareas de trazabilidad
+
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content={
+            "detail": str(exc),
+        },
+    )

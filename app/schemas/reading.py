@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # Esquemas de entrada
@@ -22,6 +22,15 @@ class ReadingUpdate(BaseModel):
         description="Nuevo valor numérico de la lectura",
         examples=[25.1],
     )
+
+    @field_validator("value")
+    @classmethod
+    def reject_null_value(cls, value: float | None) -> float:       # Rechazamos null cuando el cliente envía explícitamente value
+
+        if value is None:
+            raise ValueError("El valor de la lectura no puede ser nulo")
+
+        return value
 
 
 # Esquemas de salida: Definimos la estructura pública que devolvemos desde los endpoints. Evitamos exponer directamente las entidades internas de SQLAlchemy

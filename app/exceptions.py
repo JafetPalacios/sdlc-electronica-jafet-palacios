@@ -59,3 +59,59 @@ class InvalidDateRangeError(SensorHubError):                            # Indica
         super().__init__(                                               # Definimos un mensaje claro para explicar la causa de la validación
             "La fecha inicial no puede ser posterior a la fecha final"
         )
+
+
+# Excepciones relacionadas con reglas físicas
+# Representamos los errores producidos por tipos, unidades y valores incompatibles con el catálogo de SensorHub
+class UnsupportedSensorTypeError(SensorHubError):                       # Indicamos que el tipo de sensor no está admitido por SensorHub
+
+    def __init__(self, sensor_type: str) -> None:                       # Construimos el error con el tipo de sensor recibido
+
+        self.sensor_type = sensor_type                                  # Conservamos el tipo para facilitar pruebas y trazabilidad
+
+        super().__init__(                                               # Informamos qué valor no pertenece al catálogo admitido
+            f"El tipo de sensor {sensor_type} no está admitido"
+        )
+
+# Indicamos que la unidad no corresponde al tipo de sensor
+class InvalidSensorUnitError(SensorHubError):
+
+    def __init__(
+        self,
+        sensor_type: str,
+        received_unit: str,
+        expected_unit: str,
+    ) -> None:
+
+        self.sensor_type = sensor_type                                  # Conservamos los datos necesarios para pruebas y trazabilidad
+        self.received_unit = received_unit
+        self.expected_unit = expected_unit
+
+        super().__init__(                                              # Explicamos la unidad válida para el tipo solicitado
+            f"La unidad {received_unit} no es válida para el tipo "
+            f"{sensor_type}; se esperaba {expected_unit}"
+        )
+
+
+# Indicamos que una lectura está fuera del rango físico permitido
+class ReadingValueOutOfRangeError(SensorHubError):
+
+    def __init__(
+        self,
+        sensor_type: str,
+        value: float,
+        minimum_value: float,
+        maximum_value: float,
+    ) -> None:
+
+        # Conservamos los datos para facilitar pruebas y trazabilidad
+        self.sensor_type = sensor_type
+        self.value = value
+        self.minimum_value = minimum_value
+        self.maximum_value = maximum_value
+
+
+        super().__init__(                                                   # Informamos el intervalo admitido para el tipo de sensor
+            f"El valor {value} está fuera del rango permitido para "
+            f"{sensor_type}: {minimum_value} a {maximum_value}"
+        )

@@ -82,8 +82,11 @@ def list_sensors(
         status.HTTP_409_CONFLICT: {
             "description": "El código del sensor ya está registrado",
         },
-        status.HTTP_422_UNPROCESSABLE_CONTENT: {
-            "description": "Los datos enviados no cumplen el contrato de entrada",
+       status.HTTP_422_UNPROCESSABLE_CONTENT: {
+            "description": (
+                "Los datos enviados no cumplen el contrato de entrada "
+                "o las reglas físicas de tipo y unidad"
+            ),
         },
     },
 )
@@ -145,7 +148,8 @@ def get_sensor(
         },
         status.HTTP_422_UNPROCESSABLE_CONTENT: {
             "description": (
-                "Los datos enviados no cumplen el contrato de actualización"
+                "Los datos enviados no cumplen el contrato de actualización "
+                "o la combinación final de tipo y unidad no es válida"
             ),
         },
     },
