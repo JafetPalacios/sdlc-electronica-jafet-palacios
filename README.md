@@ -22,3 +22,178 @@ I - La segregación de interfaces evita que las clases dependan de operaciones q
 D - La inversión de dependencias se aplicó al inyectar la configuración y el parser en `UartDevice`. La clase no crea internamente un parser concreto, por lo que depende de una abstracción y no directamente de Modbus o NMEA.
 
 La principal ventaja observada es que el sistema resulta más fácil de probar y extender. Cada clase puede validarse de forma aislada y es posible incorporar nuevos protocolos o mecanismos de persistencia con cambios mínimos.
+
+
+---
+
+# Semana 4 - DevOps, CI/CD y despliegue de SensorHub
+
+[![CI Semana 4](https://github.com/JafetPalacios/sdlc-electronica-jafet-palacios/actions/workflows/ci.yml/badge.svg?branch=feature%2Fsemana4-devops)](https://github.com/JafetPalacios/sdlc-electronica-jafet-palacios/actions/workflows/ci.yml)
+
+Durante la Semana 4 se preparó SensorHub para ejecutarse de forma reproducible mediante contenedores, integración continua y despliegue automático
+
+La aplicación utiliza:
+
+- FastAPI para la API REST
+- SQLAlchemy para persistencia
+- Alembic para migraciones
+- PostgreSQL como base de datos
+- Docker para contenerización
+- Docker Compose para el entorno local completo
+- GitHub Actions para integración continua
+- Render para despliegue público y entrega continua
+
+### Producción
+
+SensorHub se encuentra desplegado públicamente en:
+
+https://sensorhub-api-clx6.onrender.com
+
+Endpoints principales:
+
+- Health check: https://sensorhub-api-clx6.onrender.com/health
+- Swagger UI: https://sensorhub-api-clx6.onrender.com/docs
+
+La versión desplegada actualmente es:
+
+`0.1.1`
+
+### Ejecución local con Docker
+
+1. Construir la imagen:
+
+`docker build -t sensorhub:dev .`
+
+2. Ejecutar únicamente la API:
+
+`docker run --rm -p 8000:8000 sensorhub:dev`
+
+Para el funcionamiento completo con PostgreSQL se recomienda utilizar Docker Compose
+
+### Ejecución con Docker Compose
+
+1. Crear un archivo `.env` local tomando como referencia `.env.example`
+
+2. Después levantar la aplicación y PostgreSQL:
+
+`docker compose up --build`
+
+3. La API queda disponible en:
+
+`http://localhost:8000`
+
+Endpoints locales:
+
+`http://localhost:8000/health`
+`http://localhost:8000/docs`
+
+Docker Compose espera a que PostgreSQL esté disponible antes de iniciar la API
+
+4. Durante el arranque se ejecutan automáticamente las migraciones mediante:
+
+`alembic upgrade head`
+
+### Migraciones
+
+1. Crear una nueva migración después de modificar los modelos:
+
+`alembic revision --autogenerate -m "descripcion de la migracion"`
+
+2. Aplicar todas las migraciones pendientes:
+
+`alembic upgrade head`
+
+3. Consultar la revisión actual:
+
+`alembic current`
+
+### Integración continua
+
+El workflow se encuentra en:
+
+`.github/workflows/ci.yml`
+
+El pipeline ejecuta automáticamente:
+
+Ruff
+  |
+  v
+mypy
+  |
+  v
+pytest + cobertura
+
+La cobertura mínima requerida es 80 % y la cobertura validada durante la Semana 4 fue 91.63 %. También se realizó una prueba deliberada de regresión para comprobar que GitHub Actions bloqueara un cambio defectuoso
+
+El flujo observado fue:
+
+CI verde
+    |
+    v
+regresión intencional
+    |
+    v
+CI rojo
+    |
+    v
+corrección
+    |
+    v
+CI verde
+Entrega continua
+
+Render está configurado con Auto-Deploy sobre la rama de trabajo de la Semana 4
+
+La entrega continua fue validada mediante el cambio:
+
+`SensorHub 0.1.0 -> 0.1.1`
+
+El flujo comprobado fue:
+
+git push
+    |
+    v
+GitHub Actions
+    |
+    v
+CI en verde
+    |
+    v
+Render Auto-Deploy
+    |
+    v
+producción actualizada
+
+Después del despliegue automático se verificó públicamente:
+
+{
+  "status": "ok",
+  "service": "SensorHub API",
+  "version": "0.1.1"
+}
+
+Las credenciales y datos sensibles no se almacenan directamente en el repositorio
+
+La aplicación utiliza:
+
+`DATABASE_URL`
+
+para configurar la conexión a la base de datos
+
+En desarrollo local las variables se cargan desde .env, archivo excluido del control de versiones
+
+El repositorio contiene .env.example únicamente como referencia de configuración
+
+En producción DATABASE_URL se configura directamente mediante las variables de entorno de Render
+
+
+
+## Un detalle sobre el badge
+
+He puesto explícitamente:
+
+`?branch=feature%2Fsemana4-devops`
+
+porque esa es actualmente la rama que contiene y ejecuta nuestro workflow.
+
+Eso hace que el badge represente la CI que realmente estamos entregando ahora mismo. Cuando resolvamos el requisito final de main, podemos cambiar el badge para que represente main.
