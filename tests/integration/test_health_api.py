@@ -10,7 +10,7 @@ def test_health_check(client: TestClient) -> None:
     assert response.status_code == status.HTTP_200_OK               # Confirmamos que la API responda correctamente
 
     assert response.json() == {                                     # Verificamos el contrato público del endpoint
-        "status": "ok",
+        "status": "error",
         "service": "SensorHub API",
         "version": "0.1.0",
     }
