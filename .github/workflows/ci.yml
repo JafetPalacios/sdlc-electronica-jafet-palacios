@@ -41,3 +41,30 @@ jobs:
       # Ejecutamos los tests y exigimos la cobertura mínima definida por el proyecto
       - name: Ejecutar tests
         run: python -m pytest
+
+
+
+  security:
+    # Ejecutamos un análisis de vulnerabilidades sobre la imagen de producción
+    runs-on: ubuntu-latest
+
+    steps:
+      # Descargamos el repositorio para construir la imagen actual
+      - name: Obtener código
+        uses: actions/checkout@v4
+
+      # Construimos la imagen multi-stage utilizada en producción
+      - name: Construir imagen Docker
+        run: docker build -t sensorhub:ci .
+
+      # Analizamos vulnerabilidades de severidad alta o crítica
+      # Ignoramos hallazgos sin corrección disponible para reducir falsos bloqueos
+      - name: Analizar imagen con Trivy
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: "sensorhub:ci"
+          format: "table"
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "HIGH,CRITICAL"
