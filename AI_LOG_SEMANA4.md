@@ -761,3 +761,92 @@ Uvicorn
 API pública
 
 El despliegue público quedó validado mediante /health, /docs y los logs de migración y arranque
+
+### Problema detectado antes de la prueba
+
+Antes de realizar la prueba de CD observé que un commit anterior había ejecutado correctamente GitHub Actions, pero Render no había iniciado un nuevo despliegue automático
+
+Revisé:
+
+- la rama configurada
+- Auto-Deploy
+- Build Filters
+- los eventos del servicio
+
+La configuración del Web Service era correcta, sin embargo, Render no registraba ningún evento para el nuevo commit
+
+Con apoyo de la IA revisé la sección de credenciales Git utilizadas por Render. Detecté que la credencial de GitHub inicialmente solo tenía acceso a:
+
+`JafetPalacios/render-blueprint-demo`
+
+y no al repositorio:
+
+`JafetPalacios/sdlc-electronica-jafet-palacios`
+
+Actualicé la autorización de GitHub para permitir a Render acceder explícitamente al repositorio del proyecto. Después de actualizar la credencial, Render mostró correctamente:
+
+`JafetPalacios/sdlc-electronica-jafet-palacios`
+
+dentro de los repositorios autorizados para despliegue
+
+Modifiqué en app/main.py:
+
+`APP_VERSION: Final[str] = "0.1.0"`
+
+por:
+
+`APP_VERSION: Final[str] = "0.1.1"`
+
+Como el contrato del endpoint /health también valida la versión, actualicé la prueba correspondiente para esperar: `0.1.1`
+
+Antes de enviar el cambio ejecuté:
+
+`python -m pytest`
+`git diff --check`
+
+Realicé el commit:
+
+`6aecf07 feat: actualizar versión de SensorHub a 0.1.1`
+
+El push disparó GitHub Actions automáticamente. Esto confirmó que el cambio continuaba cumpliendo los controles de calidad antes del despliegue
+Render detectó automáticamente el mismo commit y creó un nuevo despliegue. No fue necesario utilizar Manual Deploy ni el Deploy Hook
+Después del despliegue consulté nuevamente:
+
+https://sensorhub-api-clx6.onrender.com/health
+
+La respuesta fue:
+
+{
+  "status": "ok",
+  "service": "SensorHub API",
+  "version": "0.1.1"
+}
+
+Esto confirmó que el código correspondiente al commit 6aecf07 había llegado efectivamente al entorno público
+
+### Resultado
+
+La secuencia completa observada fue:
+
+Cambio en código
+    |
+    v
+git push
+    |
+    v
+GitHub Actions
+    |
+    v
+CI en verde
+    |
+    v
+Render Auto-Deploy
+    |
+    v
+producción actualizada
+    |
+    v
+/health -> 0.1.1
+
+Con esta prueba quedó validada la entrega continua de SensorHub desde la rama `feature/semana4-devops`
+La actualización de producción quedó trazada tanto en GitHub Actions como en el historial de deploys de Render
