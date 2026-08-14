@@ -265,3 +265,130 @@ Finalmente verifiqué:
 ## Conclusión
 
 La IA me ayudó a definir una transición controlada desde SQLite hacia PostgreSQL, manteniendo compatibilidad local. También me ayudó a comprobar la conexión real entre la API y PostgreSQL mediante una consulta ejecutada desde SQLAlchemy, evitando asumir que el simple arranque de los contenedores era suficiente evidencia. Con estas verificaciones confirmé que SensorHub funciona correctamente con Docker Compose y PostgreSQL.
+
+---
+
+## Intervención 4 - Inicialización y validación de migraciones con Alembic
+
+Antes de comenzar con GitHub Actions revisé nuevamente la guía de la Semana 4 y detecté que faltaba realizar el cierre correspondiente a Alembic
+
+Decidí detener el avance hacia CI y completar primero este requisito para respetar la estrategia de trabajo incremental definida para la semana
+
+También decidí no aplicar directamente una migración inicial sobre la base PostgreSQL que ya estaba en uso, porque las tablas `sensors` y `readings` ya existían y eso podía impedir validar correctamente la creación del esquema desde cero
+
+### Apoyo solicitado a la IA
+
+Consulté a la IA cómo incorporar Alembic al proyecto sin romper la configuración existente de SQLite y PostgreSQL
+
+También solicité apoyo para configurar correctamente `migrations/env.py`, generar una migración inicial real y comprobar que dicha migración pudiera reconstruir una base PostgreSQL vacía
+
+## La IA me recomendó:
+
+- inicializar Alembic mediante `alembic init migrations`
+- reutilizar la configuración centralizada de `DATABASE_URL` definida en `app/db.py`
+- configurar `target_metadata` con `Base.metadata`
+- importar los modelos ORM para que `sensors` y `readings` quedaran registrados en los metadatos
+- eliminar `Base.metadata.create_all()` de `app/main.py` para evitar que FastAPI y Alembic compitieran por la administración del esquema
+- generar la migración inicial utilizando temporalmente una base SQLite vacía para evitar que la autogeneración comparara contra una base que ya contenía las tablas
+- revisar y limpiar el archivo generado por Alembic para mantener comentarios y documentación en español
+- copiar `alembic.ini` y `migrations/` dentro de la imagen Docker para poder ejecutar migraciones desde el contenedor
+- probar `alembic upgrade head` contra una instancia PostgreSQL temporal e independiente antes de aplicarlo en otros entornos
+
+### Implementación
+
+Inicialicé Alembic mediante:
+
+`alembic init migrations`
+
+configuré `migrations/env.py` para utilizar:
+
+* DATABASE_URL
+* Base.metadata
+* los modelos Reading y Sensor
+
+También eliminé de app/main.py la creación automática del esquema mediante:
+
+ `Base.metadata.create_all(...)`
+
+A partir de este cambio, la responsabilidad de administrar la estructura de la base de datos queda delegada a Alembic
+
+Después de retirar `create_all()` ejecuté:
+
+* python -m ruff check app tests migrations
+* python -m mypy app tests migrations --ignore-missing-imports
+* python -m pytest
+
+# Resultados:
+
+* Ruff sin errores
+* mypy sin errores
+* 24 pruebas superadas
+* cobertura total de 91.63 %
+
+Esto confirmó que separar la administración del esquema mediante Alembic no rompió el comportamiento existente de SensorHub
+
+Para evitar generar una migración vacía contra una base que ya contenía las tablas, utilicé temporalmente:
+
+`$env:DATABASE_URL="sqlite:///./alembic_temp.db"`
+
+Luego ejecuté:
+
+`alembic revision --autogenerate -m "esquema inicial: sensors y readings"`
+
+Alembic detectó:
+
+* sensors
+* readings
+* ix_sensors_code
+
+y generó la revisión:
+
+`eacacdab5dc6`
+
+La migración fue revisada y ajustada únicamente en formato, comentarios y documentación, manteniendo la lógica generada por Alembic. Posteriormente eliminé la base temporal alembic_temp.db
+
+# Incorporación de Alembic en la imagen Docker
+Actualicé el Dockerfile para copiar:
+
+* alembic.ini
+* migrations/
+
+dentro de la imagen
+
+Después reconstruí la imagen y confirmé que los archivos de migración estuvieran disponibles dentro del contenedor. Para evitar modificar el volumen principal de desarrollo creé una instancia PostgreSQL temporal utilizando un nombre de proyecto Compose diferente:
+
+`docker compose -p sensorhub-migration-test up -d db`
+
+Verifiqué que PostgreSQL estuviera listo mediante:
+
+`docker compose -p sensorhub-migration-test exec db pg_isready -U sensor -d sensorhub`
+
+El servidor respondió que estaba aceptando conexiones. Posteriormente ejecuté desde el contenedor de la API:
+
+`docker compose -p sensorhub-migration-test run --rm api alembic upgrade head`
+
+Alembic ejecutó correctamente:
+
+* Running upgrade -> eacacdab5dc6
+* Validación del esquema creado
+
+Consulté las tablas de PostgreSQL mediante:
+
+`docker compose -p sensorhub-migration-test exec db psql -U sensor -d sensorhub -c "\dt"`
+
+Se encontraron:
+
+* alembic_version
+* readings
+* sensors
+
+
+## Conclusión
+
+La revisión de la guía me permitió detectar que todavía faltaba cerrar la integración de Alembic antes de comenzar CI
+
+La IA me apoyó en la configuración de Alembic, la separación de responsabilidades respecto a create_all(), la generación controlada de la migración inicial y la estrategia para validarla en una base PostgreSQL completamente limpia
+
+Con esta prueba confirmé que el esquema de SensorHub puede reconstruirse desde cero mediante migraciones versionadas y que la imagen Docker contiene todo lo necesario para ejecutar Alembic
+
+El cierre de Docker Compose, PostgreSQL y migraciones quedó validado antes de continuar con GitHub Actions

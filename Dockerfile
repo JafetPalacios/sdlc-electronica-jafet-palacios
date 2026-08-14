@@ -23,3 +23,7 @@ EXPOSE 8000
 
 # Iniciamos SensorHub escuchando en todas las interfaces del contenedor
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# Copiamos la configuración y el historial de migraciones para administrar el esquema con Alembic
+COPY alembic.ini .
+COPY migrations ./migrations

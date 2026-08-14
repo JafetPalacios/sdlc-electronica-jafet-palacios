@@ -3,7 +3,6 @@ from typing import Final
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from app.db import Base, engine
 from app.exceptions import (
     InvalidDateRangeError,
     InvalidSensorUnitError,
@@ -14,28 +13,20 @@ from app.exceptions import (
     SensorNotFoundError,
     UnsupportedSensorTypeError,
 )
-from app.models import Sensor  # noqa: F401
 from app.routers.readings import router as readings_router
 from app.routers.sensors import router as sensors_router
 
 # Metadatos principales de la aplicación
-# Centralizamos el nombre y la versión para reutilizarlos en la configuración de FastAPI y en el endpoint de estado
+# Centralizamos el nombre y la versión para reutilizarlos en FastAPI y en el endpoint de estado
 APP_TITLE: Final[str] = "SensorHub API"
 APP_VERSION: Final[str] = "0.1.0"
 
-# Creación de la aplicación
-app = FastAPI(                                                          # Configuramos la instancia principal de FastAPI
-    title=APP_TITLE,                                                    # Estos datos se muestran automáticamente en Swagger y OpenAPI
+
+app = FastAPI(                                                          # Creación de la aplicación
+    title=APP_TITLE,                                                    # Configuramos la instancia principal de FastAPI con los metadatos expuestos en Swagger y OpenAPI
     version=APP_VERSION,
     description="API REST para administrar sensores y sus lecturas",
 )
-
-
-# Inicialización de la base de datos
-Base.metadata.create_all(                                               # Creamos las tablas registradas en la metadata durante esta etapa inicial
-    bind=engine,                                                        # La importación de Sensor provoca también el registro de sus relaciones ORM
-)
-
 
 # Registro de routers
 # Incorporamos los endpoints de sensores y lecturas a la aplicación principal
