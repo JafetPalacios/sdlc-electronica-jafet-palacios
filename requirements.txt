@@ -1,0 +1,11 @@
+fastapi==0.141.1
+uvicorn==0.52.1
+sqlalchemy==2.0.51
+alembic==1.19.0
+pydantic==2.13.4
+httpx==0.28.1
+pytest==9.1.1
+pytest-cov==7.1.0
+ruff==0.15.22
+mypy==2.3.0
+psycopg[binary]

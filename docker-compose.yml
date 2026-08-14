@@ -1,0 +1,41 @@
+services:
+  # Ejecutamos la API de SensorHub usando la imagen construida desde el Dockerfile del proyecto
+  api:
+    build: .
+    ports:
+      - "${API_PORT:-8000}:8000"
+
+    # Construimos la URL de conexión utilizando variables definidas en el archivo .env local
+    environment:
+      DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+
+    # Indicamos que la API depende del servicio de PostgreSQL
+    # Esto controla el orden de inicio, aunque la disponibilidad real se validará posteriormente
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Ejecutamos PostgreSQL como servicio independiente dentro de la red de Docker Compose
+  db:
+    image: postgres:16
+
+    # Configuramos PostgreSQL mediante variables de entorno
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB}"
+
+    # Persistimos los datos de PostgreSQL fuera del ciclo de vida del contenedor
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+    healthcheck:
+      # Verificamos que PostgreSQL ya acepte conexiones antes de iniciar la API
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+# Declaramos el volumen administrado por Docker para conservar los datos de PostgreSQL
+volumes:
+  pgdata:

@@ -1,0 +1,31 @@
+# Excluimos el entorno virtual local porque las dependencias se instalarán dentro de la imagen
+venv/
+.venv/
+
+# Excluimos información y metadatos de Git
+.git/
+.gitignore
+
+# Excluimos cachés generadas por herramientas de desarrollo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+
+# Excluimos archivos de cobertura y resultados generados localmente
+.coverage
+htmlcov/
+
+# Excluimos bases SQLite locales para que la imagen no contenga datos del entorno de desarrollo
+sensorhub.db
+*.db
+
+# Excluimos el proyecto utilizado exclusivamente para practicar el tutorial oficial de Docker
+getting-started-todo-app/
+
+# Excluimos archivos específicos del editor y del sistema operativo
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
