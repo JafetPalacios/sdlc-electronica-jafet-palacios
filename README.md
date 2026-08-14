@@ -28,7 +28,7 @@ La principal ventaja observada es que el sistema resulta más fácil de probar y
 
 # Semana 4 - DevOps, CI/CD y despliegue de SensorHub
 
-[![CI Semana 4](https://github.com/JafetPalacios/sdlc-electronica-jafet-palacios/actions/workflows/ci.yml/badge.svg?branch=feature%2Fsemana4-devops)](https://github.com/JafetPalacios/sdlc-electronica-jafet-palacios/actions/workflows/ci.yml)
+[![CI Semana 4](https://github.com/JafetPalacios/sdlc-electronica-jafet-palacios/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/JafetPalacios/sdlc-electronica-jafet-palacios/actions/workflows/ci.yml)
 
 Durante la Semana 4 se preparó SensorHub para ejecutarse de forma reproducible mediante contenedores, integración continua y despliegue automático
 
