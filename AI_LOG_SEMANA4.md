@@ -883,3 +883,530 @@ Modifiqué la versión central de la aplicación y actualicé el test del endpoi
 
 Con esta prueba quedó demostrado que la entrega continua funciona directamente desde main, cumpliendo el criterio solicitado en la rúbrica de Semana 4
 
+---
+
+## Intervención 12 - Auditoría final de la rúbrica base y endurecimiento del entorno
+
+Después de completar el despliegue continuo desde `main`, decidí revisar nuevamente toda la guía de Semana 4 para comprobar que no quedara ningún detalle pendiente que pudiera afectar la rúbrica final
+
+La revisión se centró en:
+
+- contenerización
+- reproducibilidad
+- seguridad
+- documentación
+- rollback
+- consistencia entre desarrollo local, CI y producción
+
+### Validación de Docker Compose
+
+Ejecuté:
+
+```powershell
+docker compose config
+docker compose ps -a
+```
+
+La configuración de Compose fue válida y mostró correctamente:
+
+* api
+* db
+* pgdata
+* DATABASE_URL
+* service_healthy
+
+Durante esta revisión detecté que existía un contenedor antiguo de la API detenido y que PostgreSQL seguía activo con un volumen persistente creado antes de finalizar la integración con Alembic
+Decidí recrear los contenedores utilizando los archivos actuales de main sin eliminar inicialmente el volumen
+
+Durante el arranque se produjo el error:
+
+`./start.sh: 2: set: Illegal option -`
+
+Consulté el error con la IA y se diagnosticó que `start.sh` estaba siendo materializado en Windows con finales de línea CRLF aunque Git lo almacenaba internamente con LF
+
+Lo confirmé mediante:
+
+`git ls-files --eol start.sh` que dió como resultado `i/lf    w/crlf    start.sh`
+
+La IA recomendó añadir una política explícita en `.gitattributes`
+
+Creé:
+
+`*.sh text eol=lf`
+
+y convertí físicamente `start.sh` a LF
+
+La verificación posterior mostró:
+
+`i/lf    w/lf    attr/text eol=lf    start.sh`
+
+Reconstruí nuevamente el entorno:
+
+```docker compose down
+docker compose up -d --build
+```
+
+Docker reutilizó correctamente la caché de capas y únicamente reconstruyó el archivo modificado
+
+PostgreSQL quedó:
+
+`healthy`
+
+y la API inició correctamente. Sin embargo, durante el arranque Alembic produjo:
+
+`psycopg.errors.DuplicateTable: relation "sensors" already exists`
+
+Revisé la base persistida y comprobé que contenía:
+
+* sensors
+* readings
+
+pero no existía:
+
+`alembic_version`
+
+Esto confirmó que el volumen había sido creado antes de que Alembic quedara como administrador único del esquema
+
+Consulté además:
+
+* columnas
+* índices
+* constraints
+* cantidad de registros
+
+El esquema coincidía con la migración inicial y ambas tablas estaban vacías
+
+Resultado:
+
+sensors  = 0
+readings = 0
+
+Como el volumen no contenía datos útiles, decidí eliminarlo y comprobar el escenario realmente importante para la entrega: crear todo el entorno desde cero únicamente mediante Docker Compose y Alembic
+
+Ejecuté:
+
+`docker compose down -v`
+`docker compose up -d --build`
+
+Resultado:
+
+`PostgreSQL healthy`
+`API Up`
+
+Los logs mostraron:
+
+* Running upgrade -> eacacdab5dc6
+* Application startup complete
+* Uvicorn running on http://0.0.0.0:8000
+* Validación funcional desde una base limpia
+
+Comprobé:
+
+`Invoke-RestMethod http://localhost:8000/health`
+`(Invoke-WebRequest -UseBasicParsing http://localhost:8000/docs).StatusCode`
+
+Resultado:
+
+* status  : ok
+* service : SensorHub API
+* version : 0.1.2
+
+y:
+
+200
+
+También verifiqué en PostgreSQL:
+
+`SELECT * FROM alembic_version;`
+
+Resultado:
+
+`eacacdab5dc6`
+
+Las tablas creadas fueron:
+
+* alembic_version
+* readings
+* sensors
+
+Con esta prueba confirmé que el proyecto puede levantarse desde un entorno completamente limpio mediante:
+
+Docker Compose
+    |
+    v
+PostgreSQL
+    |
+    v
+Alembic
+    |
+    v
+SensorHub
+
+### Corrección persistente de scripts Linux
+
+Después de validar el funcionamiento real, registré la política de finales de línea mediante el commit:
+
+`0873e8d fix: asegurar finales de línea LF en scripts de Docker`
+
+Durante la auditoría detecté que el badge del README todavía apuntaba a:
+
+`feature/semana4-devops`
+
+aunque la rama definitiva del proyecto ya era `main`
+
+Lo actualicé para que el badge represente el pipeline real de main
+
+Commit:
+
+`94044c7 docs: actualizar badge de CI para main`
+
+También detecté que todas las dependencias estaban fijadas excepto `psycopg[binary]`. La versión utilizada correctamente durante los builds era 3.3.4, decidí fijarla como `psycopg[binary]==3.3.4`. Antes de registrarla ejecuté:
+
+* python -m pip install -r requirements.txt
+* python -m ruff check app tests migrations
+* python -m mypy app tests migrations --ignore-missing-imports
+* python -m pytest
+
+Resultados:
+
+* Ruff: OK
+* mypy: OK
+* 24 pruebas superadas
+* Cobertura: 91.63 %
+
+Commit:
+
+`60e2e24 chore: fijar versión de psycopg para builds reproducibles`
+
+### Estrategia de rollback
+
+La guía también pedía poder explicar cómo recuperar producción ante un despliegue defectuoso. Consulté a la IA cuál era el procedimiento más seguro
+
+La recomendación fue utilizar:
+
+`git revert <commit_defectuoso>`
+`git push origin main`
+
+en lugar de:
+
+`git reset --hard`
+`git push --force`
+
+porque git revert conserva el historial, deja trazabilidad, vuelve a pasar por CI y permite que Render haga Auto-Deploy de la corrección. También documenté que una migración de base de datos debe analizarse por separado antes de utilizar un posible `alembic downgrade` para evitar pérdida de datos. La estrategia quedó documentada en README mediante:
+
+`7614fd0 docs: documentar estrategia de rollback`
+
+### Resultado
+
+Después de estas comprobaciones confirmé que los criterios obligatorios de Semana 4 estaban cubiertos:
+
+Contenerización          cumplido
+CI                       cumplido
+Producción               cumplido
+CD desde main            cumplido
+Seguridad                cumplido
+Rollback documentado     cumplido
+Cobertura >= 80 %        cumplido
+Bitácora                 actualizada
+
+La cobertura validada se mantuvo en:
+
+91.63 %
+
+Con esto quedó consolidado el cumplimiento de la rúbrica base antes de comenzar las extensiones de Alto Potencial
+
+---
+
+## Intervención 13 - Implementación de extensiones de Alto Potencial
+
+Después de confirmar que la rúbrica base estaba completa, decidí implementar también las extensiones de Alto Potencial indicadas en la guía. El plan seguido fue:
+
+* multi-stage build
+* Trivy
+* PostgreSQL real en CI
+* issue automático ante fallo en main
+* GitHub Environment con protección
+
+En esta intervención registro las extensiones completadas antes de configurar el GitHub Environment
+
+### Extensión 1 - Build multi-stage
+
+La guía proponía una imagen multi-stage menor a 200 MB. Primero medí la imagen existente:
+
+`docker image ls sdlc-electronica-jafet-palacios-api`
+`docker image inspect sdlc-electronica-jafet-palacios-api:latest --format "{{.Size}}"`
+
+Resultado inicial:
+
+`Content size: 98.8 MB`
+`Size: 98,788,917 bytes`
+
+Aunque la imagen ya estaba por debajo de 200 MB, todavía no utilizaba multi-stage
+Detecté que requirements.txt contenía tanto dependencias de producción como herramientas utilizadas únicamente por desarrollo y CI
+
+Separé:
+
+`requirements.txt`
+
+para runtime:
+
+* fastapi
+* uvicorn
+* sqlalchemy
+* alembic
+* pydantic
+* psycopg
+
+y creé:
+
+`requirements-dev.txt`
+
+con:
+
+* -r requirements.txt
+* httpx
+* pytest
+* pytest-cov
+* ruff
+* mypy
+
+Después validé:
+
+* python -m pip install -r requirements-dev.txt
+* python -m ruff check app tests migrations
+* python -m mypy app tests migrations --ignore-missing-imports
+* python -m pytest
+
+Resultados:
+
+* Ruff: OK
+* mypy: OK
+* 24 pruebas superadas
+* Cobertura: 91.63 %
+
+También actualicé GitHub Actions para instalar `requirements-dev.txt` en el job de pruebas
+Convertí el Dockerfile a dos etapas:
+
+builder
+    |
+    v
+runtime
+
+En builder se instalan únicamente las dependencias de producción en `/install` y la etapa final copia únicamente esas dependencias junto con:
+
+* app/
+* alembic.ini
+* migrations/
+* start.sh
+
+La imagen final no incluye herramientas de desarrollo. Parta la medición de la imagen optimizada
+Construí desde cero mediante `docker compose build --no-cache api`
+
+Resultado:
+
+`Content size: 62.3 MB`
+`Size: 62,341,440 bytes`
+
+Antes:   98.8 MB
+Después: 62.3 MB
+
+La reducción aproximada fue 36.9 %
+
+También confirmé dentro del runtime:
+
+* pytest: None
+* ruff: None
+* mypy: None
+* httpx: None
+
+Esto demostró que las herramientas de desarrollo ya no estaban presentes en producción.
+Levanté Compose y comprobé:
+
+`api: Up`
+`db: healthy`
+
+El primer intento de consultar /health se hizo antes de que Uvicorn terminara de iniciar. Después de esperar el arranque completo, los logs mostraron:
+
+`Application startup complete`
+`Uvicorn running on http://0.0.0.0:8000`
+
+y validé:
+
+`/health -> 200`
+`/docs   -> 200`
+`version -> 0.1.2`
+
+La extensión quedó registrada en:
+
+`1607a81 feat: optimizar imagen con build multi-stage`
+
+### Extensión 2 - Escaneo de vulnerabilidades con Trivy
+
+Decidí integrar Trivy directamente en GitHub Actions porque no estaba instalado localmente. Agregué un job `security` que:
+
+* construye la imagen de producción
+* ejecuta Trivy
+* analiza vulnerabilidades de sistema operativo y librerías
+* considera severidades HIGH y CRITICAL
+* bloquea el pipeline mediante exit-code: 1
+* ignora únicamente vulnerabilidades sin corrección disponible
+
+Utilicé:
+
+`aquasecurity/trivy-action@v0.35.0`
+
+en lugar de seguir una referencia mutable como master
+
+Commit:
+
+`2813e7b ci: agregar escaneo de vulnerabilidades con Trivy`
+
+GitHub Actions ejecutó:
+
+* CI #19
+* Rama: main
+* Estado: Success
+
+Con esto confirmé que el análisis de seguridad estaba integrado y no detectó vulnerabilidades bloqueantes bajo el criterio configurado
+
+### Extensión 3 - PostgreSQL real y smoke test en GitHub Actions
+
+La siguiente extensión consistió en comprobar SensorHub contra PostgreSQL real dentro de CI, en lugar de depender únicamente de SQLite durante los tests. Agregué el job `smoke-postgres`con `postgres:16` como service container.
+La configuración utilizó una base temporal exclusiva de CI y una DATABASE_URL local al runner. El flujo implementado fue:
+
+PostgreSQL 16
+      |
+      v
+healthcheck
+      |
+      v
+alembic upgrade head
+      |
+      v
+SELECT 1
+      |
+      v
+alembic_version
+      |
+      v
+sensors + readings
+
+El smoke test verifica:
+
+* SELECT 1 = 1
+* revision = eacacdab5dc6
+* alembic_version existe
+* sensors existe
+* readings existe
+
+Commit:
+
+`8fae1e8 ci: validar migraciones con PostgreSQL real`
+
+GitHub Actions ejecutó:
+
+* CI #20
+* Rama: main
+* Estado: Success
+
+Esto confirmó que las migraciones funcionan realmente contra PostgreSQL dentro del pipeline
+
+### Extensión 4 - Issue automático cuando falle CI en main
+
+La guía proponía crear automáticamente un issue si falla main. Para implementarlo creé:
+
+`.github/workflows/ci-failure-issue.yml`
+
+El workflow escucha `workflow_run` del workflow `CI` y únicamente actúa cuando:
+
+* conclusion == failure
+* head_branch == main
+
+Configuré permisos mínimos:
+
+* issues: write
+* contents: read
+
+El workflow:
+
+* obtiene la ejecución fallida
+* genera un título con el SHA
+* incluye el enlace al workflow
+* verifica si ya existe un issue equivalente
+* evita duplicados
+* crea el issue cuando corresponde
+
+Commit:
+
+`395950a ci: crear issue automático ante fallos en main`
+
+No quise romper código real ni introducir una regresión en producción solo para comprobar esta automatización. Por recomendación de la IA añadí un mecanismo manual mediante `workflow_dispatch` con el input `simulate_failure`. El paso de fallo solo puede ejecutarse cuando:
+
+* event_name == workflow_dispatch
+* simulate_failure == true
+
+Por tanto, los pushes y pull requests normales no se ven afectados
+
+Commit:
+
+`2e5147f ci: permitir simulación manual de fallo controlado`
+
+Desde GitHub Actions ejecuté manualmente:
+
+* Workflow: CI
+* Branch: main
+* simulate_failure: true
+
+Resultado:
+
+* CI #23
+* Evento: workflow_dispatch
+* Estado: Failure intencional
+
+Los jobs mostraron:
+
+* test            Failure
+* security        Success
+* smoke-postgres  Success
+
+Esto confirmó que únicamente falló el paso de simulación mientras Trivy y PostgreSQL continuaban funcionando correctamente
+Después del fallo, el workflow `Reportar fallo de CI` se ejecutó automáticamente
+
+Resultado:
+
+* Reportar fallo de CI #3
+* Estado: Success
+
+GitHub creó automáticamente el issue:
+
+`CI falló en main - 2e5147f`
+
+Con esto quedó demostrado el flujo completo:
+
+CI falla en main
+       |
+       v
+workflow_run
+       |
+       v
+Reportar fallo de CI
+       |
+       v
+Issue automático
+
+La prueba fue deliberada, controlada y no requirió introducir código defectuoso ni realizar un despliegue de producción fallido
+
+Estado de las extensiones
+
+Al finalizar esta intervención quedaron completadas y verificadas:
+
+Multi-stage < 200 MB             completado
+Imagen final 62.3 MB             completado
+Separación runtime/dev           completado
+Trivy                            completado
+PostgreSQL real en CI            completado
+Smoke test de migraciones        completado
+Issue automático ante fallo      completado
+Prueba controlada del issue      completado
+
+La única extensión pendiente de este bloque es GitHub Environment con protección que se realizará como una intervención separada para conservar la trazabilidad.
