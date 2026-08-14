@@ -608,3 +608,156 @@ Uvicorn
 SensorHub
 
 El proyecto quedó preparado para que el siguiente paso sea configurar el despliegue público
+
+---
+
+## Intervención 8 - Validación de CI mediante un fallo intencional
+
+Al revisar nuevamente la guía de la Semana 4 detecté que faltaba realizar el ejercicio del Día 3 en el que se solicita romper deliberadamente una prueba para observar cómo GitHub Actions bloquea el cambio. Decidí detener temporalmente el trabajo de despliegue y completar esta validación antes de continuar. Como ya tenía cambios pendientes relacionados con producción, decidí no mezclarlos con el experimento de CI
+
+Guardé temporalmente los cambios de producción mediante:
+`git stash push -u -m "Preparación de producción pendiente antes de prueba CI roja"` Esto permitió dejar el árbol de trabajo limpio y realizar la prueba de CI de forma aislada. Una vez realizada la prueba fallida realicé el commit:
+
+`116e30c test: provocar fallo controlado para validar CI`
+
+y lo envié al repositorio remoto. El push ejecutó automáticamente el workflow de CI y la ejecución correspondiente mostró:
+
+CI #3
+Commit: 116e30c
+Rama: feature/semana4-devops
+Estado: Failure
+Duración: 30 s
+
+Con esto confirmé que GitHub Actions detectó correctamente el cambio defectuoso y bloqueó el pipeline.
+
+---
+
+## Intervención 9 - Despliegue público de SensorHub en Render
+
+Después de validar localmente el arranque completo con PostgreSQL, Alembic y Uvicorn decidí desplegar SensorHub utilizando Render
+
+Decidí mantener el despliegue conectado a la rama:
+
+`feature/semana4-devops`
+
+para poder completar y revisar la Semana 4 sin integrar todavía los cambios en main
+
+Creé una instancia PostgreSQL administrada en Render con la siguiente configuración general:
+
+* Name: sensorhub-db
+* Database: sensorhub
+* User: sensorhub
+* Region: Oregon (US West)
+* PostgreSQL Version: 18
+* Instance Type: Free
+* Storage: 1 GB
+
+Mantuve deshabilitados:
+
+* Storage Autoscaling
+* High Availability
+
+Render proporcionó una Internal Database URL que utilicé directamente como variable de entorno del servicio web. No almacené ni publiqué esta credencial dentro del repositorio
+
+Configuré un nuevo Web Service conectado al repositorio del proyecto. La configuración utilizada fue:
+
+* Language: Docker
+* Branch: feature/semana4-devops
+* Region: Oregon (US West)
+* Root Directory: vacío
+* Dockerfile Path: ./Dockerfile
+* Instance Type: Free
+
+Inicialmente Render detectó automáticamente el proyecto como una aplicación Python y propuso comandos genéricos basados en Poetry y Gunicorn. Como el proyecto ya cuenta con una estrategia de contenedores propia, cambié manualmente el runtime a Docker para utilizar el Dockerfile versionado en el repositorio
+
+Configuré:
+
+`DATABASE_URL`
+
+utilizando directamente la Internal Database URL generada por Render
+
+### Migraciones y arranque
+
+No configuré un comando adicional de pre-deploy porque las migraciones ya forman parte del flujo definido en start.sh
+
+El proceso de inicio ejecuta:
+
+`alembic upgrade head`
+
+antes de levantar:
+
+`python -m uvicorn app.main:app`
+
+### Resultado del despliegue
+
+Render construyó correctamente la imagen Docker
+Durante los logs de despliegue se observó:
+
+* Context impl PostgresqlImpl
+* Will assume transactional DDL
+* Running upgrade -> eacacdab5dc6
+
+Después inició correctamente la aplicación:
+
+* Started server process
+* Application startup complete
+* Uvicorn running on http://0.0.0.0:10000
+
+Esto confirmó que start.sh utilizó correctamente la variable PORT proporcionada por Render
+
+Render posteriormente indicó:
+
+* Your service is live
+* URL pública
+
+La API quedó disponible en:
+
+https://sensorhub-api-clx6.onrender.com
+Validación de /health
+
+Render ejecutó repetidamente el health check y obtuvo:
+
+`GET /health HTTP/1.1 200 OK`
+
+También validé manualmente:
+
+https://sensorhub-api-clx6.onrender.com/health
+
+Resultado:
+
+{
+  "status": "ok",
+  "service": "SensorHub API",
+  "version": "0.1.0"
+}
+
+Validación de Swagger
+
+También validé públicamente:
+
+https://sensorhub-api-clx6.onrender.com/docs
+
+La documentación Swagger UI cargó correctamente
+
+### Resultado
+
+Con esta prueba confirmé que SensorHub funciona fuera de mi entorno local con:
+
+Docker
+    |
+    v
+Render
+    |
+    v
+PostgreSQL administrado
+    |
+    v
+Alembic
+    |
+    v
+Uvicorn
+    |
+    v
+API pública
+
+El despliegue público quedó validado mediante /health, /docs y los logs de migración y arranque
