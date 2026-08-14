@@ -12,7 +12,8 @@ services:
     # Indicamos que la API depende del servicio de PostgreSQL
     # Esto controla el orden de inicio, aunque la disponibilidad real se validará posteriormente
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   # Ejecutamos PostgreSQL como servicio independiente dentro de la red de Docker Compose
   db:
@@ -27,6 +28,13 @@ services:
     # Persistimos los datos de PostgreSQL fuera del ciclo de vida del contenedor
     volumes:
       - pgdata:/var/lib/postgresql/data
+
+    healthcheck:
+      # Verificamos que PostgreSQL ya acepte conexiones antes de iniciar la API
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 # Declaramos el volumen administrado por Docker para conservar los datos de PostgreSQL
 volumes:

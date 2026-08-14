@@ -514,3 +514,97 @@ Decidí mantenerla registrada como observación técnica, pero no bloquear el av
 
 Con esta ejecución confirmé que el pipeline funciona fuera de mi entorno local y puede ejecutar correctamente los controles automatizados desde GitHub Actions
 
+---
+
+## Intervención 7 - Preparación y validación del arranque de producción
+
+Antes de configurar el despliegue público decidí validar localmente que SensorHub pudiera iniciar desde una base PostgreSQL completamente limpia sin depender de la creación automática de tablas desde FastAPI. También mantener las migraciones como parte obligatoria del proceso de arranque para que cualquier entorno nuevo pueda actualizar su esquema antes de levantar la API
+Para evitar interferencias con otros servicios locales utilicé un proyecto temporal de Docker Compose y, durante la validación, cambié temporalmente el puerto publicado de la API de 8000 a 8001
+
+### Apoyo solicitado a la IA
+
+Solicité apoyo a la IA para preparar un flujo de arranque adecuado para producción y comprobar que PostgreSQL, Alembic y Uvicorn se iniciaran en el orden correcto. También consulté los errores encontrados cuando el puerto 8000 estaba ocupado y cuando el contenedor de la API no llegaba a iniciar
+
+La IA me ayudó a:
+
+- crear un script `start.sh`
+- ejecutar `alembic upgrade head` antes de iniciar Uvicorn
+- utilizar `set -e` para impedir que la aplicación continúe si falla una migración
+- utilizar la variable `PORT` cuando sea proporcionada por la plataforma de despliegue
+- mantener el puerto 8000 como valor local por defecto
+- copiar `start.sh` dentro de la imagen Docker
+- utilizar el script como comando de inicio del contenedor
+- agregar un `healthcheck` al servicio PostgreSQL de Docker Compose
+- configurar `depends_on` con `condition: service_healthy`
+- validar todo el proceso utilizando una base PostgreSQL temporal y vacía
+
+Actualicé el Dockerfile para copiar `start.sh` dentro de la imagen. También sustituí el comando directo de Uvicorn por `sh ./start.sh`. De esta forma el mismo contenedor administra primero las migraciones y después inicia la aplicación
+
+Modifiqué `docker-compose.yml` para agregar un healthcheck basado en `pg_isready`. También cambié la dependencia de la API para utilizar:
+
+depends_on:
+  db:
+    condition: service_healthy
+
+Esto evita que Alembic intente conectarse antes de que PostgreSQL esté disponible
+
+### Prueba de arranque
+
+Definí temporalmente `$env:API_PORT="8001"` levanté el proyecto mediante `docker compose -p sensorhub-startup-test up --build`
+
+Comprobé el estado de los servicios:
+
+api -> Up
+db -> Up (healthy)
+
+Verifiqué el endpoint:
+
+http://localhost:8001/health
+
+### Resultado:
+
+status: ok
+service: SensorHub API
+version: 0.1.0
+
+También validé:
+
+http://localhost:8001/docs con resultado HTTP 200
+
+
+Consulté la tabla:
+
+`alembic_version`
+
+y confirmé la revisión:
+
+`eacacdab5dc6`
+
+También comprobé que PostgreSQL contuviera:
+
+- alembic_version
+- readings
+- sensors
+
+Después de finalizar las pruebas eliminé el entorno temporal utilizado para la validación y posteriormente confirmé que no quedaran:
+
+* contenedores asociados a sensorhub-startup-test
+* volúmenes asociados a sensorhub-startup-test
+
+Con esta prueba confirmé que SensorHub puede iniciar desde una base PostgreSQL vacía siguiendo automáticamente el flujo:
+
+PostgreSQL
+    |
+    v
+healthcheck
+    |
+    v
+Alembic
+    |
+    v
+Uvicorn
+    |
+    v
+SensorHub
+
+El proyecto quedó preparado para que el siguiente paso sea configurar el despliegue público

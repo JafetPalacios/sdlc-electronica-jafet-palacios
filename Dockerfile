@@ -18,12 +18,15 @@ RUN python -m pip install --no-cache-dir -r requirements.txt
 # Copiamos únicamente el código necesario para ejecutar SensorHub
 COPY app ./app
 
-# Documentamos el puerto en el que Uvicorn expondrá la API
-EXPOSE 8000
-
-# Iniciamos SensorHub escuchando en todas las interfaces del contenedor
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-
 # Copiamos la configuración y el historial de migraciones para administrar el esquema con Alembic
 COPY alembic.ini .
 COPY migrations ./migrations
+
+# Copiamos el script que prepara la base de datos y arranca SensorHub
+COPY start.sh ./start.sh
+
+# Documentamos el puerto en el que Uvicorn expondrá la API
+EXPOSE 8000
+
+# Ejecutamos el arranque de producción que aplica migraciones antes de levantar la API
+CMD ["sh", "./start.sh"]
