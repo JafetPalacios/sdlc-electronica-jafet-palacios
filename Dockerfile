@@ -1,32 +1,48 @@
-# Usamos Python 3.12 en una imagen slim para mantener compatibilidad con el proyecto y reducir el tamaño final
-FROM python:3.12-slim
+# Etapa de construcción
+# Instalamos únicamente las dependencias necesarias para ejecutar SensorHub
+FROM python:3.12-slim AS builder
 
-# Evitamos generar archivos bytecode y hacemos que los logs se escriban inmediatamente en la salida del contenedor
+# Evitamos generar archivos bytecode y mantenemos una salida inmediata de logs
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# Definimos el directorio de trabajo de SensorHub dentro del contenedor
 WORKDIR /app
 
-# Copiamos primero las dependencias para aprovechar la caché de capas de Docker
-# Si solo cambia el código de la aplicación, Docker puede reutilizar la instalación de dependencias
+# Copiamos primero las dependencias para aprovechar la caché de Docker
 COPY requirements.txt .
 
-# Instalamos las dependencias sin conservar la caché local de pip dentro de la imagen
-RUN python -m pip install --no-cache-dir -r requirements.txt
+# Instalamos las dependencias de runtime en un directorio independiente
+# Después copiaremos únicamente este directorio a la imagen final
+RUN python -m pip install \
+    --no-cache-dir \
+    --prefix=/install \
+    -r requirements.txt
 
-# Copiamos únicamente el código necesario para ejecutar SensorHub
+
+# Etapa final de ejecución
+# Partimos nuevamente de una imagen slim limpia para no arrastrar archivos del builder
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Copiamos solamente las dependencias instaladas durante la etapa de construcción
+COPY --from=builder /install /usr/local
+
+# Copiamos únicamente los archivos necesarios para ejecutar SensorHub
 COPY app ./app
 
-# Copiamos la configuración y el historial de migraciones para administrar el esquema con Alembic
+# Incluimos la configuración y las migraciones administradas por Alembic
 COPY alembic.ini .
 COPY migrations ./migrations
 
-# Copiamos el script que prepara la base de datos y arranca SensorHub
+# Copiamos el script de inicio encargado de aplicar migraciones y levantar Uvicorn
 COPY start.sh ./start.sh
 
-# Documentamos el puerto en el que Uvicorn expondrá la API
+# Documentamos el puerto utilizado localmente por SensorHub
 EXPOSE 8000
 
-# Ejecutamos el arranque de producción que aplica migraciones antes de levantar la API
+# Aplicamos las migraciones pendientes y levantamos la API
 CMD ["sh", "./start.sh"]
