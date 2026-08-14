@@ -1,0 +1,62 @@
+name: Reportar fallo de CI
+
+# Ejecutamos este workflow cuando termina el workflow principal de CI
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+
+permissions:
+  # Permitimos únicamente la creación y consulta de issues
+  issues: write
+  contents: read
+
+jobs:
+  report-failure:
+    # Creamos el issue solo cuando CI falla sobre main
+    if: >
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.head_branch == 'main'
+
+    runs-on: ubuntu-latest
+
+    steps:
+      # Creamos un issue con información suficiente para investigar el fallo
+      - name: Crear issue por fallo de CI
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const run = context.payload.workflow_run
+
+            const title = `CI falló en main - ${run.head_sha.substring(0, 7)}`
+
+            const body = [
+              "## Fallo automático de CI",
+              "",
+              `El workflow **${run.name}** falló en la rama **${run.head_branch}**`,
+              "",
+              `Commit: \`${run.head_sha}\``,
+              `Ejecución: ${run.html_url}`,
+              "",
+              "Revisar los jobs fallidos antes de continuar con nuevos despliegues"
+            ].join("\n")
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open"
+            })
+
+            const existingIssue = issues.find(issue => issue.title === title)
+
+            // Evitamos crear issues duplicados para la misma ejecución fallida
+            if (!existingIssue) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body
+              })
+            }
