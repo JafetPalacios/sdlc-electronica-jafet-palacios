@@ -219,3 +219,4 @@ __marimo__/
 sensorhub.db
 
 getting-started-todo-app/
+.env

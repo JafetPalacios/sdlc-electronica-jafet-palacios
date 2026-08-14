@@ -1,22 +1,37 @@
+import os
 from collections.abc import Generator
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+
 # Configuración de conexión
-# Indicamos que utilizaremos SQLite y que los datos se almacenarán en el archivo sensorhub.db ubicado en la raíz del proyecto
-DATABASE_URL = "sqlite:///./sensorhub.db"
+# Obtenemos la URL de conexión desde una variable de entorno
+# Si no existe, mantenemos SQLite como opción local por defecto
+def get_database_url() -> str:
+
+    url = os.getenv("DATABASE_URL", "sqlite:///./sensorhub.db")
+
+    if url.startswith("postgres://"):                                                   # Normalizamos URLs entregadas por algunos proveedores para usar psycopg
+        return url.replace("postgres://", "postgresql+psycopg://", 1)
+
+    if url.startswith("postgresql://") and "+psycopg" not in url:                       # Añadimos explícitamente el driver psycopg cuando la URL usa postgresql://
+        return url.replace("postgresql://", "postgresql+psycopg://", 1)
+
+    return url
 
 
-# Motor de base de datos
-# El motor administra la comunicación entre SQLAlchemy y SQLite
-# Desactivamos check_same_thread porque FastAPI puede atender una petición utilizando hilos distintos durante su ciclo de ejecución
+DATABASE_URL = get_database_url()
 
-engine = create_engine(
+connect_args = (                                                                        # Configuramos argumentos específicos solo cuando trabajamos con SQLite
+    {"check_same_thread": False}                                                        # PostgreSQL no utiliza check_same_thread
+    if DATABASE_URL.startswith("sqlite")
+    else {}
+)
+
+engine = create_engine(                                                                 # Creamos el motor utilizando la URL correspondiente al entorno actual
     DATABASE_URL,
-    connect_args={
-        "check_same_thread": False,
-    },
+    connect_args=connect_args,
 )
 
 

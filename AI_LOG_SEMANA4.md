@@ -69,11 +69,8 @@ Consulté a la IA cómo preparar correctamente el proyecto para contenerizar Sen
 
 También solicité apoyo para definir un Dockerfile compatible con la configuración actual del proyecto y con los requisitos de la Semana 4
 
-### Propuestas de la IA
+# La IA me ayudó a:
 
-La IA me recomendó:
-
-- crear un archivo `.dockerignore`
 - excluir del contexto de construcción el entorno virtual, cachés de herramientas, archivos de cobertura, bases SQLite locales y archivos del editor
 - copiar primero `requirements.txt` para aprovechar la caché de capas de Docker
 - instalar las dependencias antes de copiar el código fuente
@@ -112,6 +109,159 @@ La estructura del Dockerfile quedó orientada a aprovechar la caché de capas, c
 
 Ejecuté:
 
-```powershell
-docker build -t sensorhub:dev .
+`powershell
+docker build -t sensorhub:dev .`
 
+---
+
+## Intervención 3 - Integración de SensorHub con PostgreSQL mediante Docker Compose
+
+Decidí mantener el avance de forma incremental y no crear directamente toda la infraestructura de Compose sin comprobar antes cada dependencia
+
+También decidí separar las credenciales locales del repositorio mediante un archivo `.env` ignorado por Git y mantener una plantilla `.env.example` versionable
+
+### Apoyo solicitado a la IA
+
+Consulté a la IA cómo adaptar SensorHub para dejar de depender exclusivamente de SQLite y permitir el uso de PostgreSQL mediante variables de entorno. También solicité apoyo para preparar Docker Compose y para verificar que la API estuviera realmente conectándose a PostgreSQL, no únicamente arrancando correctamente
+
+# La IA me ayudó a:
+
+- instalar `psycopg[binary]` como driver de PostgreSQL
+- modificar `app/db.py` para obtener `DATABASE_URL` desde una variable de entorno
+- mantener SQLite como fallback cuando `DATABASE_URL` no está definida
+- normalizar URLs `postgres://` y `postgresql://` hacia `postgresql+psycopg://`
+- aplicar `check_same_thread=False` únicamente cuando se utiliza SQLite
+- crear un archivo `.env` local excluido de Git
+- crear `.env.example` sin secretos reales como referencia de configuración
+- utilizar el nombre del servicio `db` como host de PostgreSQL dentro de Docker Compose
+- validar la conexión desde el propio contenedor de la API mediante SQLAlchemy y una consulta `SELECT 1`
+- comprobar directamente en PostgreSQL la existencia de las tablas `sensors` y `readings`
+
+### Implementación
+
+Instalé el driver PostgreSQL:
+
+`powershell
+python -m pip install "psycopg[binary]"`
+
+Antes de introducir Docker Compose ejecuté:
+
+* python -m ruff check app tests
+* python -m mypy app tests
+* python -m pytest
+
+# Resultados:
+
+* Ruff sin errores
+* mypy sin errores
+* 24 pruebas superadas
+* cobertura total de 91.68 %
+
+Esto permitió confirmar que la nueva configuración de base de datos no rompió el funcionamiento local con SQLite
+
+Validación de normalización de DATABASE_URL
+
+# Probé los formatos:
+
+* postgres://sensor:secret@db:5432/sensorhub
+* postgresql://sensor:secret@db:5432/sensorhub
+
+En ambos casos la aplicación los normalizó correctamente a:
+
+postgresql+psycopg://sensor:secret@db:5432/sensorhub
+
+# Configuración segura
+
+Agregué .env a .gitignore para evitar incluir credenciales locales en el historial
+
+También creé .env.example como plantilla versionable sin utilizar la contraseña real del entorno local
+
+Verifiqué que Git ignorara correctamente .env mediante:
+
+git check-ignore -v .env
+
+# Docker Compose
+
+Creé docker-compose.yml con dos servicios:
+
+* api
+* db
+
+El servicio api se construye utilizando el Dockerfile del proyecto y recibe DATABASE_URL mediante variables de entorno
+
+El servicio db utiliza la imagen postgres:16 y persiste sus datos mediante un volumen administrado por Docker
+
+Dentro de la URL de conexión utilicé db como host porque Docker Compose resuelve los servicios por nombre dentro de su red interna
+
+Antes de iniciar los servicios validé la configuración con:
+
+`docker compose config`
+
+La configuración fue interpretada correctamente
+
+# Ejecución
+
+Levanté la infraestructura mediante:
+
+`docker compose up --build`
+
+Docker creó correctamente:
+
+* la imagen de la API
+* la imagen de PostgreSQL
+* la red interna de Compose
+* el volumen persistente
+* el contenedor de la API
+* el contenedor de PostgreSQL
+
+PostgreSQL terminó su inicialización mostrando:
+
+`database system is ready to accept connections`
+
+La API inició correctamente con Uvicorn
+
+# Validación de la conexión real con PostgreSQL
+
+Verifiqué el estado de los servicios mediante:
+
+`docker compose ps`
+
+Ambos contenedores permanecieron activos
+
+Después ejecuté desde el propio contenedor de la API una conexión utilizando el engine de SQLAlchemy:
+
+`docker compose exec api python -c "from sqlalchemy import text; from app.db import engine; connection = engine.connect(); print('DATABASE_URL:', engine.url.render_as_string(hide_password=True)); print('SELECT 1:', connection.execute(text('SELECT 1')).scalar()); connection.close()"`
+
+Resultado:
+
+`DATABASE_URL: postgresql+psycopg://sensor:***@db:5432/sensorhub`
+`SELECT 1: 1`
+
+Esto confirmó que SensorHub estaba conectado realmente a PostgreSQL mediante SQLAlchemy y psycopg
+
+# Validación del esquema
+
+Consulté directamente PostgreSQL con:
+
+`docker compose exec db psql -U sensor -d sensorhub -c "\dt"`
+
+Se encontraron las tablas:
+
+`readings`
+`sensors`
+
+# Validación de la API
+
+Finalmente verifiqué:
+
+`Invoke-WebRequest http://127.0.0.1:8000/health -UseBasicParsing`
+`Invoke-WebRequest http://127.0.0.1:8000/docs -UseBasicParsing`
+
+## Resultados:
+
+`/health respondió HTTP 200`
+`/docs respondió HTTP 200`
+
+## Conclusión
+
+La IA me ayudó a definir una transición controlada desde SQLite hacia PostgreSQL, manteniendo compatibilidad local. También me ayudó a comprobar la conexión real entre la API y PostgreSQL mediante una consulta ejecutada desde SQLAlchemy, evitando asumir que el simple arranque de los contenedores era suficiente evidencia. Con estas verificaciones confirmé que SensorHub funciona correctamente con Docker Compose y PostgreSQL.
