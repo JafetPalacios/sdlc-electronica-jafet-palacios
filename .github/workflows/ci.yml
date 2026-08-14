@@ -130,25 +130,27 @@ jobs:
       - name: Instalar dependencias
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
 
       # Aplicamos el historial completo de migraciones sobre PostgreSQL
       - name: Aplicar migraciones
         run: python -m alembic upgrade head
 
       # Verificamos que PostgreSQL tenga la revisión y las tablas esperadas
-      - name: Ejecutar smoke test de PostgreSQL
+      - name: Ejecutar smoke test funcional con PostgreSQL
         run: |
           python - <<'PY'
+          from fastapi.testclient import TestClient
           from sqlalchemy import inspect, text
 
           from app.db import engine
+          from app.main import app
 
           # Confirmamos que la conexión real con PostgreSQL funciona
           with engine.connect() as connection:
               assert connection.execute(text("SELECT 1")).scalar_one() == 1
 
-              # Confirmamos que Alembic registró una revisión aplicada
+              # Confirmamos que Alembic registró la revisión esperada
               revision = connection.execute(
                   text("SELECT version_num FROM alembic_version")
               ).scalar_one()
@@ -159,11 +161,52 @@ jobs:
           assert revision == "eacacdab5dc6"
           assert {"alembic_version", "sensors", "readings"} <= tables
 
-          print("PostgreSQL smoke test correcto")
+          # Ejecutamos un flujo funcional real contra PostgreSQL
+          with TestClient(app) as client:
+              # Creamos un sensor de humedad mediante la API
+              sensor_response = client.post(
+                  "/sensors/",
+                  json={
+                      "code": "SMOKE-HUM-001",
+                      "name": "Sensor smoke PostgreSQL",
+                      "sensor_type": "humidity",
+                      "unit": "%",
+                  },
+              )
+
+              assert sensor_response.status_code == 201
+              sensor = sensor_response.json()
+              sensor_id = sensor["id"]
+
+              # Registramos una lectura válida para el sensor creado
+              reading_response = client.post(
+                  f"/sensors/{sensor_id}/readings",
+                  json={
+                      "value": 55.0,
+                  },
+              )
+
+              assert reading_response.status_code == 201
+              reading = reading_response.json()
+              reading_id = reading["id"]
+
+              # Consultamos nuevamente la lectura para verificar persistencia
+              get_reading_response = client.get(
+                  f"/readings/{reading_id}",
+              )
+
+              assert get_reading_response.status_code == 200
+              persisted_reading = get_reading_response.json()
+
+              assert persisted_reading["sensor_id"] == sensor_id
+              assert persisted_reading["value"] == 55.0
+
+          print("PostgreSQL smoke test funcional correcto")
           print(f"Alembic revision: {revision}")
+          print(f"Sensor creado: {sensor_id}")
+          print(f"Lectura creada y consultada: {reading_id}")
           print(f"Tablas: {sorted(tables)}")
           PY
-
   production-gate:
     # Registramos el entorno de producción únicamente después de validar CI en main
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
