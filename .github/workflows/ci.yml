@@ -68,3 +68,80 @@ jobs:
           ignore-unfixed: true
           vuln-type: "os,library"
           severity: "HIGH,CRITICAL"
+
+  smoke-postgres:
+    # Validamos SensorHub contra una instancia PostgreSQL real dentro de GitHub Actions
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # Utilizamos la misma versión principal de PostgreSQL definida en Docker Compose
+        image: postgres:16
+
+        env:
+          POSTGRES_USER: sensor
+          POSTGRES_PASSWORD: sensorhub_ci
+          POSTGRES_DB: sensorhub
+
+        ports:
+          - 5432:5432
+
+        # Esperamos a que PostgreSQL acepte conexiones antes de ejecutar los pasos
+        options: >-
+          --health-cmd "pg_isready -U sensor -d sensorhub"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Conectamos SensorHub con el PostgreSQL real levantado por GitHub Actions
+      DATABASE_URL: postgresql+psycopg://sensor:sensorhub_ci@localhost:5432/sensorhub
+
+    steps:
+      # Descargamos el código del repositorio
+      - name: Obtener código
+        uses: actions/checkout@v4
+
+      # Configuramos Python para ejecutar Alembic y las comprobaciones de SensorHub
+      - name: Configurar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Instalamos únicamente las dependencias necesarias para ejecutar la aplicación
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      # Aplicamos el historial completo de migraciones sobre PostgreSQL
+      - name: Aplicar migraciones
+        run: python -m alembic upgrade head
+
+      # Verificamos que PostgreSQL tenga la revisión y las tablas esperadas
+      - name: Ejecutar smoke test de PostgreSQL
+        run: |
+          python - <<'PY'
+          from sqlalchemy import inspect, text
+
+          from app.db import engine
+
+          # Confirmamos que la conexión real con PostgreSQL funciona
+          with engine.connect() as connection:
+              assert connection.execute(text("SELECT 1")).scalar_one() == 1
+
+              # Confirmamos que Alembic registró una revisión aplicada
+              revision = connection.execute(
+                  text("SELECT version_num FROM alembic_version")
+              ).scalar_one()
+
+          # Comprobamos que las tablas principales fueron creadas por las migraciones
+          tables = set(inspect(engine).get_table_names())
+
+          assert revision == "eacacdab5dc6"
+          assert {"alembic_version", "sensors", "readings"} <= tables
+
+          print("PostgreSQL smoke test correcto")
+          print(f"Alembic revision: {revision}")
+          print(f"Tablas: {sorted(tables)}")
+          PY
