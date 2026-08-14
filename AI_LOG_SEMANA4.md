@@ -850,3 +850,36 @@ producción actualizada
 
 Con esta prueba quedó validada la entrega continua de SensorHub desde la rama `feature/semana4-devops`
 La actualización de producción quedó trazada tanto en GitHub Actions como en el historial de deploys de Render
+
+---
+
+## Intervención 11 - Validación final de CD desde main
+
+
+Después de validar Auto-Deploy desde la rama `feature/semana4-devops`, revisé nuevamente la rúbrica de Semana 4. Detecté que el criterio de entrega continua solicitaba específicamente demostrar que un push a `main` actualizara producción automáticamente. Por esta razón decidí integrar el trabajo de Semana 4 en `main` y repetir la prueba de CD desde esa rama
+
+Antes de realizar la integración comprobé la relación entre:
+
+main
+feature/semana3-sensorhub
+feature/semana4-devops
+
+La comparación mostró que Semana 4 contenía completamente los cambios de Semana 3 y agregaba 13 commits adicionales. Creé un Pull Request desde `feature/semana4-devops` hacia `main`
+Para demostrar que un nuevo push a main modificaba producción actualicé la versión pública de SensorHub:
+
+`0.1.1 -> 0.1.2`
+
+Modifiqué la versión central de la aplicación y actualicé el test del endpoint `/health`
+
+* GitHub Actions detectó automáticamente el cambio en `main`
+* Render detectó el mismo commit y realizó automáticamente el despliegue
+* Después del despliegue consulté `https://sensorhub-api-clx6.onrender.com/health`. La respuesta fue:
+
+{
+  "status": "ok",
+  "service": "SensorHub API",
+  "version": "0.1.2"
+}
+
+Con esta prueba quedó demostrado que la entrega continua funciona directamente desde main, cumpliendo el criterio solicitado en la rúbrica de Semana 4
+
