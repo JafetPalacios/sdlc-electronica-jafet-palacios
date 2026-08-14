@@ -428,7 +428,6 @@ Por esta razón, una ejecución real podrá obtenerse mediante un pull request h
 
 Creé la estructura:
 
-```text
 .github/
 └── workflows/
     └── ci.yml
@@ -455,4 +454,63 @@ mypy
     v
 pytest
 
+
+---
+
+## Intervención 6 - Primera ejecución real del pipeline de CI
+
+Decidí mantener la Semana 4 en su propia rama de trabajo `feature/semana4-devops` y no integrar todavía Semana 3 ni Semana 4 en `main`. Para poder validar CI directamente sobre la rama de entrega de la Semana 4, ajusté el workflow para que también se ejecutara cuando existieran pushes sobre `feature/semana4-devops`
+
+### Apoyo solicitado a la IA
+
+Consulté a la IA cómo validar GitHub Actions sin tener que mezclar todavía los cambios de Semana 3 y Semana 4 con la rama `main`. También solicité apoyo para interpretar el resultado mostrado por GitHub Actions después del primer push que disparó el workflow
+
+La IA propuso modificar el trigger del workflow para mantener:
+
+- ejecución sobre `main`
+- ejecución sobre `feature/semana4-devops`
+- ejecución sobre pull requests
+
+La configuración quedó preparada para permitir validar CI directamente sobre la rama de trabajo de la Semana 4
+
+### Implementación
+
+Actualicé el workflow para utilizar:
+
+yaml
+on:
+  push:
+    branches:
+      - main
+      - feature/semana4-devops
+  pull_request:
+
+
+  Después realicé el commit:
+
+`98dec01 ci: ejecutar pipeline en la rama de semana 4`
+
+y lo envié al repositorio remoto mediante git push. El push sobre `feature/semana4-devops` disparó automáticamente la primera ejecución real del `workflow CI`
+
+GitHub Actions mostró:
+
+- Workflow: CI
+- Ejecución: #1
+- Evento: push
+- Rama: feature/semana4-devops
+- Commit: 98dec01
+- Estado: Success
+- Duración total: 36 s
+- Job: test
+- Duración del job: 32 s
+
+La ejecución terminó correctamente en un runner de GitHub
+GitHub mostró una anotación relacionada con Node.js indicando que algunas acciones utilizadas por el workflow apuntan a Node.js 20 y están siendo ejecutadas sobre Node.js 24
+La advertencia no provocó ningún fallo y el estado final de la ejecución fue Success
+
+Decidí mantenerla registrada como observación técnica, pero no bloquear el avance de la Semana 4 porque no afecta las validaciones requeridas del proyecto
+
+### Resultado
+
+Con esta ejecución confirmé que el pipeline funciona fuera de mi entorno local y puede ejecutar correctamente los controles automatizados desde GitHub Actions
 
