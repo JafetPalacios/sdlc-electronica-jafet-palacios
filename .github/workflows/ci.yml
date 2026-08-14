@@ -6,7 +6,17 @@ on:
     branches:
       - main
       - feature/semana4-devops
+
   pull_request:
+
+  # Permitimos ejecutar CI manualmente para validar controles de automatización
+  workflow_dispatch:
+    inputs:
+      simulate_failure:
+        description: "Provocar un fallo controlado para validar el reporte automático"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   test:
@@ -41,6 +51,14 @@ jobs:
       # Ejecutamos los tests y exigimos la cobertura mínima definida por el proyecto
       - name: Ejecutar tests
         run: python -m pytest
+
+
+      # Provocamos un fallo únicamente cuando se solicita desde una ejecución manual
+      - name: Simular fallo controlado
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.simulate_failure }}
+        run: |
+          echo "Fallo controlado para validar la creación automática de issues"
+          exit 1
 
 
 
