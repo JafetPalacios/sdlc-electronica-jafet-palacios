@@ -163,3 +163,25 @@ jobs:
           print(f"Alembic revision: {revision}")
           print(f"Tablas: {sorted(tables)}")
           PY
+
+  production-gate:
+    # Registramos el entorno de producción únicamente después de validar CI en main
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    needs:
+      - test
+      - security
+      - smoke-postgres
+
+    runs-on: ubuntu-latest
+
+    environment:
+      name: production
+
+    steps:
+      # Confirmamos que todos los controles previos finalizaron correctamente
+      - name: Registrar validación de producción
+        run: |
+          echo "CI validado para producción"
+          echo "Rama: $GITHUB_REF_NAME"
+          echo "Commit: $GITHUB_SHA"
