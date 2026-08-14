@@ -19,7 +19,7 @@ from app.routers.sensors import router as sensors_router
 # Metadatos principales de la aplicación
 # Centralizamos el nombre y la versión para reutilizarlos en FastAPI y en el endpoint de estado
 APP_TITLE: Final[str] = "SensorHub API"
-APP_VERSION: Final[str] = "0.1.1"
+APP_VERSION: Final[str] = "0.1.2"
 
 
 app = FastAPI(                                                          # Creación de la aplicación

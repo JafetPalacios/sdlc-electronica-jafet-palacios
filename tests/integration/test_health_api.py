@@ -12,5 +12,5 @@ def test_health_check(client: TestClient) -> None:
     assert response.json() == {                                     # Verificamos el contrato público del endpoint
         "status": "ok",
         "service": "SensorHub API",
-        "version": "0.1.1",
+        "version": "0.1.2",
     }
