@@ -194,6 +194,17 @@ He puesto explícitamente:
 
 `?branch=feature%2Fsemana4-devops`
 
-porque esa es actualmente la rama que contiene y ejecuta nuestro workflow.
+porque esa era la rama que contiene y ejecuta nuestro workflow.
 
-Eso hace que el badge represente la CI que realmente estamos entregando ahora mismo. Cuando resolvamos el requisito final de main, podemos cambiar el badge para que represente main.
+Eso hace que el badge represente la CI que realmente estoy entregando en ese momento. Cuando resolví el requisito final de main, cambié el badge para que represente main.
+
+## Rollback
+
+Si una versión desplegada introduce un fallo, se identifica el commit responsable y se crea un `revert` en `main`
+
+```bash
+git switch main
+git pull --ff-only origin main
+git revert <commit_defectuoso>
+git push origin main
+```
