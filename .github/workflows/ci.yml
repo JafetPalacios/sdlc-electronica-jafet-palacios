@@ -1,10 +1,11 @@
 name: CI
 
-# Ejecutamos el pipeline en pushes a main y en cualquier pull request
+# Ejecutamos el pipeline en pushes a main, en la rama de Semana 4 y en cualquier pull request
 on:
   push:
     branches:
       - main
+      - feature/semana4-devops
   pull_request:
 
 jobs:
