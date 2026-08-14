@@ -1400,13 +1400,204 @@ Estado de las extensiones
 
 Al finalizar esta intervención quedaron completadas y verificadas:
 
-Multi-stage < 200 MB             completado
-Imagen final 62.3 MB             completado
-Separación runtime/dev           completado
-Trivy                            completado
-PostgreSQL real en CI            completado
-Smoke test de migraciones        completado
-Issue automático ante fallo      completado
-Prueba controlada del issue      completado
+Multi-stage < 200 MB
+Imagen final 62.3 MB
+Separación runtime/dev
+Trivy
+PostgreSQL real en CI
+Smoke test de migraciones
+Issue automático ante fallo
+Prueba controlada del issue
 
 La única extensión pendiente de este bloque es GitHub Environment con protección que se realizará como una intervención separada para conservar la trazabilidad.
+
+---
+
+## Intervención 14 - Protección del entorno de producción con GitHub Environments
+
+Como última extensión de Alto Potencial de debía configurar un GitHub Environment para representar y proteger el entorno de producción. El objetivo era que el pipeline solo pudiera registrar una validación de producción cuando:
+
+- el cambio proviniera de `main`
+- los tests hubieran terminado correctamente
+- el análisis de seguridad con Trivy hubiera terminado correctamente
+- el smoke test con PostgreSQL real hubiera terminado correctamente
+
+### Creación del environment
+
+Desde la configuración del repositorio creé el environment `production`
+En la sección `Deployment branches and tags` seleccioné `Selected branches and tags` y permití únicamente `main`. La configuración final quedó:
+
+* Environment: production
+* Allowed branch: main
+* Protection rules: 1
+
+No fue necesario almacenar secretos adicionales dentro del environment porque las credenciales reales de producción continúan administrándose directamente en Render
+Para evitar duplicar el despliegue real realizado por Render, no implementé un segundo sistema de deployment dentro de GitHub Actions. En su lugar, agregué un job de control llamado `production-gate`. Este job depende de:
+
++ test
+* security
+* smoke-postgres
+
+mediante `needs` y se ejecuta únicamente cuando:
+
+* github.ref == refs/heads/main
+* github.event_name == push
+
+El job utiliza explícitamente:
+
+environment:
+  name: production
+
+De esta forma el environment forma parte real del pipeline y no queda únicamente como configuración administrativa
+
+El flujo final quedó:
+
+push a main
+    |
+    +-------------------+
+    |                   |
+    v                   v
+test                security
+    |                   |
+    +---------+---------+
+              |
+              v
+       smoke-postgres
+              |
+              v
+       production-gate
+              |
+              v
+   Environment: production
+
+En la práctica los tres jobs de validación pueden ejecutarse en paralelo y production-gate espera a que todos terminen correctamente
+
+Commit
+`98b098c ci: proteger validación de producción con environment`
+
+Después del push, GitHub Actions ejecutó:
+
+* CI #25
+* Commit: 98b098c
+* Rama: main
+* Estado: Success
+* Duración aproximada: 41 s
+
+Los jobs mostraron:
+
+* test             Success
+* security         Success
+* smoke-postgres   Success
+* production-gate  Success
+
+El gráfico de dependencias confirmó que production-gate se ejecutó únicamente después de completar correctamente los tres controles anteriores
+
+### Validación del environment
+
+En:
+
+* Settings
+* Environments
+
+GitHub mostró: production
+`1 protection rule`
+
+Esto confirmó que el environment production estaba activo y protegido mediante la restricción configurada para main
+
+### Resultado
+
+Con esta configuración quedó implementada la última extensión de Alto Potencial. El pipeline final ahora incluye:
+
+* Ruff
+* mypy
+* pytest + cobertura
+* Trivy
+* PostgreSQL real
+* Alembic
+* smoke test
+* production gate
+* environment protegido
+
+La secuencia de validación de producción quedó:
+
+push a main
+    |
+    v
+CI
+    |
+    +--> test
+    |
+    +--> security
+    |
+    +--> smoke-postgres
+              |
+              v
+       production-gate
+              |
+              v
+       production
+
+Con esto quedaron completadas las extensiones de Alto Potencial propuestas para Semana 4:
+
+* Multi-stage build < 200 MB
+* Imagen final de 62.3 MB
+* Trivy
+* PostgreSQL real en CI
+* Smoke test con Alembic
+* Issue automático ante fallo
+* Prueba controlada de fallo
+* GitHub Environment production
+* Protección de rama main
+
+### NOTA
+La guía propone “consultar alerta” como parte del smoke test avanzado, pero SensorHub Semana 4 no implementa un recurso o endpoint de alertas. Por ello, el smoke test funcional se amplió hasta el máximo comportamiento soportado por la aplicación actual: migrar PostgreSQL, crear sensor, crear lectura y consultar la lectura persistida.
+
+### Ampliación del smoke test funcional con PostgreSQL
+
+Al revisar nuevamente la guía detecté que la extensión de PostgreSQL proponía no solo aplicar migraciones y verificar el esquema, sino también ejecutar un flujo funcional completo. Consulté con la IA cómo adaptar esta validación al alcance real de SensorHub. La revisión del código confirmó que la aplicación actual no implementa recursos ni endpoints de alertas, por lo que no era correcto inventar una funcionalidad adicional únicamente para satisfacer el ejemplo de la guía
+
+Decidí ampliar el smoke test hasta el máximo comportamiento funcional soportado actualmente por SensorHub
+
+El nuevo flujo ejecuta:
+
+PostgreSQL 16
+    |
+    v
+alembic upgrade head
+    |
+    v
+verificación de conexión
+    |
+    v
+verificación de alembic_version
+    |
+    v
+verificación de tablas
+    |
+    v
+POST /sensors/
+    |
+    v
+POST /sensors/{id}/readings
+    |
+    v
+GET /readings/{id}
+    |
+    v
+verificación de persistencia
+
+Para poder utilizar TestClient dentro del job `smoke-postgres`, el runner instala `requirements-dev.txt`, sin modificar las dependencias incluidas en la imagen Docker de producción
+
+Registré el cambio mediante:
+
+`609861a ci: ampliar smoke test funcional con PostgreSQL`
+
+Después del push, GitHub Actions ejecutó:
+
+* CI #26
+* Commit: 609861a
+* Estado: Success
+
+La ejecución confirmó que el smoke test funcional contra PostgreSQL real terminó correctamente y que production-gate continuó formando parte de la cadena de validación
+
+La parte de consulta de alertas propuesta como ejemplo en la guía no se implementó porque SensorHub todavía no dispone de esa funcionalidad dentro del alcance actual
