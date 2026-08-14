@@ -15,7 +15,7 @@ Se busca comprobar que el proyecto SensorHub se encuentra estable localmente ant
 
 La rama se encontraba sincronizada con su correspondiente rama remota
 
-## Validación de calidad local
+### Validación de calidad local
 
 Se ejecutaron las siguientes comprobaciones:
 
@@ -23,7 +23,7 @@ Se ejecutaron las siguientes comprobaciones:
 * python -m mypy app tests
 * python -m pytest --cov=app --cov-report=term-missing
 
-# Resultados:
+### Resultados:
 
 * Ruff sin errores
 * mypy sin errores en 33 archivos fuente
@@ -31,13 +31,13 @@ Se ejecutaron las siguientes comprobaciones:
 * cobertura total de 92.29 %
 * cobertura mínima requerida: 80 %
 
-## Validación de ejecución local
+### Validación de ejecución local
 
 Se levantó la API con Uvicorn y se verificaron manualmente los endpoints principales
 
 * GET /health
 
-# Resultado:
+### Resultado:
 
 * HTTP 200
 * servicio: SensorHub API
@@ -45,7 +45,7 @@ Se levantó la API con Uvicorn y se verificaron manualmente los endpoints princi
 * estado: ok
 
 
-## Conclusión
+### Conclusión
 
 La primera fase de la Semana 4 queda validada
 
@@ -69,7 +69,7 @@ Consulté a la IA cómo preparar correctamente el proyecto para contenerizar Sen
 
 También solicité apoyo para definir un Dockerfile compatible con la configuración actual del proyecto y con los requisitos de la Semana 4
 
-# La IA me ayudó a:
+### La IA me ayudó a:
 
 - excluir del contexto de construcción el entorno virtual, cachés de herramientas, archivos de cobertura, bases SQLite locales y archivos del editor
 - copiar primero `requirements.txt` para aprovechar la caché de capas de Docker
@@ -79,13 +79,8 @@ También solicité apoyo para definir un Dockerfile compatible con la configurac
 - ejecutar Uvicorn escuchando en `0.0.0.0` para permitir conexiones desde fuera del contenedor
 - mantener SQLite durante esta primera validación y dejar la migración a PostgreSQL para el siguiente peldaño con Docker Compose
 
-### Decisión final
 
-Decidí seguir una estrategia incremental
-
-Primero validaría que SensorHub funcionara correctamente dentro de Docker usando la configuración actual con SQLite
-
-Después de comprobar este punto, continuaría con Docker Compose y PostgreSQL
+Decidí seguir una estrategia incremental. Primero validaría que SensorHub funcionara correctamente dentro de Docker usando la configuración actual con SQLite. Después de comprobar este punto, continuaría con Docker Compose y PostgreSQL
 
 ### Implementación
 
@@ -124,7 +119,7 @@ También decidí separar las credenciales locales del repositorio mediante un ar
 
 Consulté a la IA cómo adaptar SensorHub para dejar de depender exclusivamente de SQLite y permitir el uso de PostgreSQL mediante variables de entorno. También solicité apoyo para preparar Docker Compose y para verificar que la API estuviera realmente conectándose a PostgreSQL, no únicamente arrancando correctamente
 
-# La IA me ayudó a:
+### La IA me ayudó a:
 
 - instalar `psycopg[binary]` como driver de PostgreSQL
 - modificar `app/db.py` para obtener `DATABASE_URL` desde una variable de entorno
@@ -150,7 +145,7 @@ Antes de introducir Docker Compose ejecuté:
 * python -m mypy app tests
 * python -m pytest
 
-# Resultados:
+### Resultados:
 
 * Ruff sin errores
 * mypy sin errores
@@ -161,7 +156,7 @@ Esto permitió confirmar que la nueva configuración de base de datos no rompió
 
 Validación de normalización de DATABASE_URL
 
-# Probé los formatos:
+### Probé los formatos:
 
 * postgres://sensor:secret@db:5432/sensorhub
 * postgresql://sensor:secret@db:5432/sensorhub
@@ -170,7 +165,7 @@ En ambos casos la aplicación los normalizó correctamente a:
 
 postgresql+psycopg://sensor:secret@db:5432/sensorhub
 
-# Configuración segura
+### Configuración segura
 
 Agregué .env a .gitignore para evitar incluir credenciales locales en el historial
 
@@ -180,7 +175,7 @@ Verifiqué que Git ignorara correctamente .env mediante:
 
 git check-ignore -v .env
 
-# Docker Compose
+### Docker Compose
 
 Creé docker-compose.yml con dos servicios:
 
@@ -199,7 +194,7 @@ Antes de iniciar los servicios validé la configuración con:
 
 La configuración fue interpretada correctamente
 
-# Ejecución
+### Ejecución
 
 Levanté la infraestructura mediante:
 
@@ -220,7 +215,7 @@ PostgreSQL terminó su inicialización mostrando:
 
 La API inició correctamente con Uvicorn
 
-# Validación de la conexión real con PostgreSQL
+### Validación de la conexión real con PostgreSQL
 
 Verifiqué el estado de los servicios mediante:
 
@@ -239,7 +234,7 @@ Resultado:
 
 Esto confirmó que SensorHub estaba conectado realmente a PostgreSQL mediante SQLAlchemy y psycopg
 
-# Validación del esquema
+### Validación del esquema
 
 Consulté directamente PostgreSQL con:
 
@@ -250,19 +245,19 @@ Se encontraron las tablas:
 `readings`
 `sensors`
 
-# Validación de la API
+### Validación de la API
 
 Finalmente verifiqué:
 
 `Invoke-WebRequest http://127.0.0.1:8000/health -UseBasicParsing`
 `Invoke-WebRequest http://127.0.0.1:8000/docs -UseBasicParsing`
 
-## Resultados:
+### Resultados:
 
 `/health respondió HTTP 200`
 `/docs respondió HTTP 200`
 
-## Conclusión
+### Conclusión
 
 La IA me ayudó a definir una transición controlada desde SQLite hacia PostgreSQL, manteniendo compatibilidad local. También me ayudó a comprobar la conexión real entre la API y PostgreSQL mediante una consulta ejecutada desde SQLAlchemy, evitando asumir que el simple arranque de los contenedores era suficiente evidencia. Con estas verificaciones confirmé que SensorHub funciona correctamente con Docker Compose y PostgreSQL.
 
@@ -282,7 +277,7 @@ Consulté a la IA cómo incorporar Alembic al proyecto sin romper la configuraci
 
 También solicité apoyo para configurar correctamente `migrations/env.py`, generar una migración inicial real y comprobar que dicha migración pudiera reconstruir una base PostgreSQL vacía
 
-## La IA me recomendó:
+### La IA me recomendó:
 
 - inicializar Alembic mediante `alembic init migrations`
 - reutilizar la configuración centralizada de `DATABASE_URL` definida en `app/db.py`
@@ -318,7 +313,7 @@ Después de retirar `create_all()` ejecuté:
 * python -m mypy app tests migrations --ignore-missing-imports
 * python -m pytest
 
-# Resultados:
+### Resultados:
 
 * Ruff sin errores
 * mypy sin errores
@@ -347,7 +342,7 @@ y generó la revisión:
 
 La migración fue revisada y ajustada únicamente en formato, comentarios y documentación, manteniendo la lógica generada por Alembic. Posteriormente eliminé la base temporal alembic_temp.db
 
-# Incorporación de Alembic en la imagen Docker
+### Incorporación de Alembic en la imagen Docker
 Actualicé el Dockerfile para copiar:
 
 * alembic.ini
@@ -383,7 +378,7 @@ Se encontraron:
 * sensors
 
 
-## Conclusión
+### Conclusión
 
 La revisión de la guía me permitió detectar que todavía faltaba cerrar la integración de Alembic antes de comenzar CI
 
@@ -392,3 +387,72 @@ La IA me apoyó en la configuración de Alembic, la separación de responsabilid
 Con esta prueba confirmé que el esquema de SensorHub puede reconstruirse desde cero mediante migraciones versionadas y que la imagen Docker contiene todo lo necesario para ejecutar Alembic
 
 El cierre de Docker Compose, PostgreSQL y migraciones quedó validado antes de continuar con GitHub Actions
+
+---
+
+## Intervención 5 - Preparación del pipeline de CI con GitHub Actions
+
+Decidí mantener el mismo proceso incremental utilizado durante los pasos anteriores y no considerar terminado el pipeline únicamente por haber creado el archivo de configuración. Primero debía comprobar localmente que los mismos comandos que posteriormente ejecutaría GitHub Actions continuaran funcionando correctamente. También mantuve el requisito de que el pipeline utilizara Python 3.12, la misma versión configurada para el proyecto
+
+### Apoyo solicitado a la IA
+
+Solicité apoyo a la IA para preparar el pipeline de integración continua de SensorHub conforme a los requisitos de la Semana 4
+
+El pipeline debía validar automáticamente:
+
+- estilo y errores comunes mediante Ruff
+- tipado estático mediante mypy
+- pruebas automatizadas mediante pytest
+- cobertura mínima del 80 %
+- crear el workflow:
+
+`.github/workflows/ci.yml`
+
+### La IA me ayudó a:
+
+- utilizar `actions/checkout@v4` para obtener el código del repositorio
+- utilizar `actions/setup-python@v5` con Python 3.12
+- instalar las dependencias exclusivamente desde `requirements.txt`
+- ejecutar las herramientas mediante `python -m` para asegurar que utilizaran el mismo intérprete configurado en el runner
+- ejecutar Ruff sobre `app`, `tests` y `migrations`
+- ejecutar mypy sobre `app`, `tests` y `migrations`
+- ejecutar pytest utilizando la configuración existente de `pyproject.toml`
+- mantener el requisito de cobertura dentro de `pyproject.toml`, donde ya está configurado `--cov-fail-under=80`
+- activar el workflow en pushes a `main` y en pull requests
+
+La IA también indicó que un push directo a `feature/semana4-devops` no ejecutaría actualmente el evento `push`, ya que este está limitado a `main`
+
+Por esta razón, una ejecución real podrá obtenerse mediante un pull request hacia `main` o posteriormente mediante un push a `main`
+
+### Implementación
+
+Creé la estructura:
+
+```text
+.github/
+└── workflows/
+    └── ci.yml
+
+
+El workflow quedó organizado en un job que utiliza un runner ubuntu-latest
+
+Las etapas configuradas fueron:
+
+Checkout
+    |
+    v
+Python 3.12
+    |
+    v
+Instalación de dependencias
+    |
+    v
+Ruff
+    |
+    v
+mypy
+    |
+    v
+pytest
+
+
