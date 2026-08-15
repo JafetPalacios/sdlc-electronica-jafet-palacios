@@ -100,7 +100,7 @@ Actualmente `get_sensor`, `update_sensor` y `delete_sensor` realizan de forma in
 
 ### Prompt pobre
 
-Refactoriza este servicio para eliminar código repetido y mejorarlo (pegué el contenido completo de app/services/sensor_service.py)
+Refactoriza este servicio para eliminar código repetido y mejorarlo (pegué el contenido completo de `app/services/sensor_service.py`)
 
 ### Resultado del prompt pobre
 
@@ -449,42 +449,373 @@ En esta tarea también se utilizaron modelos de IA diferentes, por lo que las di
 
 ### Objetivo de la tarea
 
-Pendiente de definir
+Explicar el flujo completo de creación de una lectura en SensorHub, desde la recepción de `POST /sensors/{sensor_id}/readings` en el router hasta la persistencia y construcción de la respuesta.La tarea permitirá comparar una solicitud de explicación genérica frente a un prompt que especifique qué responsabilidades, validaciones y colaboraciones entre capas deben identificarse sin inventar comportamiento que no esté presente en el código.
 
 ### Prompt pobre
 
-Pendiente
+Explícame cómo funciona la creación de una lectura en este código (le dí el contenido completo de `app/routers/readings.py` y `app/services/reading_service.py`)
 
 ### Resultado del prompt pobre
 
-Pendiente
+El proceso de creación de una lectura se divide en dos capas principales: la capa de transporte (`Router de FastAPI`) y la capa de aplicación/negocio (`ReadingService`).El flujo paso a paso funciona de la siguiente manera:
+
+1. Entrada de la Petición y Validación (`Capa de Router`)El proceso comienza en la función de ruta `@router.post("/sensors/{sensor_id}/readings")`:
+
+1. Recepción de Parámetros:
+* `sensor_id`: Extraído directamente de la URL. FastAPI valida que sea un entero (`int`).
+* `reading_data`: Objeto Pydantic (`ReadingCreate`) recibido en el cuerpo JSON del HTTP request. FastAPI valida automáticamente los tipos y el formato del payload. Si la estructura es inválida, se detiene la ejecución devolviendo un código `422 Unprocessable Content`.
+
+2. Inyección de Dependencias:
+* FastAPI inyecta la instancia de `ReadingService` a través de `ReadingServiceDependency` (`get_reading_service`).
+
+3. Delegación: El router llama al método
+* `service.create_reading`(`sensor_id, reading_data`).
+
+2. Lógica de Negocio y Reglas Físicas (Capa de Servicio)
+Dentro del método `ReadingService.create_reading`:
+
+1. Verificación de Existencia del Sensor Propietario:
+```Python
+sensor = self._sensor_repository.get_by_id(sensor_id)
+if sensor is None:
+    raise SensorNotFoundError(sensor_id)
+```
+Consulte al repositorio de sensores si el `sensor_id` existe. Si no se encuentra, se detiene lanzando `SensorNotFoundError`, lo que FastAPI traduce a una respuesta con status `404 Not Found`.
+
+2. Validación del Valor de la Lectura (`_validate_reading_value`):
+```Python
+self._validate_reading_value(
+    sensor_type=sensor.sensor_type,
+    value=reading_data.value,
+)
+```
+* Obtiene las reglas físicas asociadas al tipo de sensor (`SENSOR_RULES.get(sensor_type)`).
+* Verifica si el valor enviado (`reading_data.value`) se encuentra dentro de los límites permitidos (`rule.minimum_value` y `rule.maximum_value`).
+* Si está fuera de rango, lanza `ReadingValueOutOfRangeError`.
+
+3. Construcción e Inserción de la Entidad:
+```Python
+reading = Reading(
+    sensor_id=sensor_id,
+    value=reading_data.value,
+)
+return self._reading_repository.create(reading)
+```
+Crea la entidad ORM `Reading` asociándole el `sensor_id` y el valor. La fecha/timestamp se omite explícitamente en el constructor para que la base de datos la autogenere al insertar. Finalmente, el repositorio inserta el registro y retorna la entidad persistida.
+
+3. Formateo y Respuesta
+
+1. Retorno al Router: El servicio entrega el objeto ORM `Reading` resultante al controlador.
+
+2. Serialización a DTO:
+```Python
+return ReadingResponse.model_validate(reading)
+```
+`ReadingResponse.model_validate` toma la entidad ORM y la convierte al esquema DTO público.
+
+3. Respuesta HTTP: FastAPI serializa la respuesta en formato JSON, devolviendo un código de estado `201 Created`.
+
+¿Te gustaría profundizar en algún aspecto específico del flujo?
 
 ### Análisis del resultado
 
-Pendiente
+La respuesta reconstruyó correctamente el flujo principal de creación de una lectura y distinguió las responsabilidades generales del router y de `ReadingService`. Identificó la recepción de `sensor_id` y `ReadingCreate`, la inyección de `ReadingService`, la delegación hacia `create_reading`, la comprobación de existencia del sensor, la validación física del valor, la construcción de `Reading`, la persistencia mediante el repositorio y la conversión final a `ReadingResponse`.
+También reconoció correctamente que la validación del valor de la lectura pertenece al servicio y utiliza las reglas definidas en `SENSOR_RULES`. Esto permite distinguir la validación estructural de los datos recibidos de las reglas de negocio relacionadas con el tipo de sensor y sus límites físicos.
+Sin embargo, la explicación contiene afirmaciones que no pueden demostrarse únicamente con `app/routers/readings.py` y `app/services/reading_service.py`. La más importante es afirmar que `SensorNotFoundError` es traducida por FastAPI a una respuesta `404 Not Found`. El router documenta una posible respuesta 404, pero en los archivos proporcionados no aparece el manejador de excepciones responsable de realizar esa traducción, por lo que la IA está infiriendo una parte de la infraestructura que no puede observar directamente.
+Algo similar ocurre cuando se afirma que la base de datos autogenera el timestamp. El comentario existente en `ReadingService` indica que ese es el comportamiento esperado, pero los archivos proporcionados no incluyen el modelo `Reading`, la configuración de la columna ni la implementación del repositorio. Por lo tanto, puede describirse como una intención documentada en el código, pero no comprobarse completamente a partir de estos dos archivos.
+La respuesta también utiliza el término DTO para describir `ReadingResponse`, aunque el proyecto proporcionado únicamente permite comprobar que se trata de un esquema utilizado como contrato público de respuesta. El término no afecta al flujo explicado, pero es una interpretación adicional introducida por la IA.
+El resultado muestra que un prompt genérico puede producir una explicación clara y técnicamente plausible, pero no obliga al modelo a distinguir entre comportamiento directamente observable, comportamiento documentado mediante comentarios e inferencias sobre componentes que no recibió. En documentación técnica, esta diferencia es importante porque una explicación convincente puede presentar como hechos detalles que todavía requieren verificación.
 
 ### Prompt bueno
 
 CONTEXTO:
-Pendiente
+SensorHub es una API desarrollada con FastAPI y Python 3.12 utilizando una arquitectura en capas. Se proporcionan únicamente `app/routers/readings.py` y `app/services/reading_service.py`. No debes asumir cómo están implementados los repositorios, modelos, dependencias o manejadores globales de excepciones que no aparecen en estos archivos.
 
 TAREA:
-Pendiente
+Explica paso a paso el flujo de creación de una lectura cuando se recibe `POST /sensors/{sensor_id}/readings`, desde la entrada al router hasta la construcción de la respuesta.
+La explicación debe identificar claramente qué responsabilidad corresponde al router, cuál corresponde a `ReadingService` y cuáles operaciones son delegadas a repositorios.
 
 RESTRICCIONES:
-Pendiente
+- Basa la explicación únicamente en el código proporcionado
+- Distingue la validación realizada por FastAPI/Pydantic de las reglas de negocio ejecutadas por `ReadingService`
+- Explica la comprobación de existencia del sensor
+- Explica la validación del valor mediante `_validate_reading_value`
+- Explica la construcción de la entidad `Reading`
+- Explica la llamada a `ReadingRepository.create`
+- Explica la conversión final mediante `ReadingResponse.model_validate`
+- Identifica las excepciones de dominio que pueden originarse durante el flujo
+- No afirmes cómo se transforman las excepciones de dominio en respuestas HTTP si esa implementación no aparece en el código proporcionado
+- No inventes detalles de SQLAlchemy, commits, transacciones o implementación interna de los repositorios
+- Si un comportamiento solo aparece indicado mediante un comentario, señálalo como comportamiento documentado pero no verificado con los archivos disponibles
+- No propongas refactorizaciones ni modificaciones al código
 
 ENTREGA:
-Pendiente
+Devuelve una explicación técnica estructurada y concisa del flujo. Separa claramente:
+1. Entrada y validación HTTP
+2. Lógica de aplicación y reglas de negocio
+3. Persistencia delegada
+4. Construcción de la respuesta
+5. Aspectos que no pueden confirmarse con los archivos proporcionados
 
 ### Resultado del prompt bueno
 
-Pendiente
+1. Entrada y validación HTTP
+
+El flujo comienza en:
+
+`POST /sensors/{sensor_id}/readings`
+
+FastAPI dirige la petición a `create_reading`:
+
+```python
+def create_reading(
+    sensor_id: int,
+    reading_data: ReadingCreate,
+    service: ReadingServiceDependency,
+) -> ReadingResponse:
+```
+Antes de ejecutar la lógica del endpoint, FastAPI/Pydantic se encargan de construir y validar los argumentos declarados:
+
+* `sensor_id` debe poder interpretarse como `int`
+* el cuerpo de la petición debe poder convertirse a `ReadingCreate`
+* `service` se obtiene mediante la dependencia `Depends(get_reading_service)`
+
+La implementación de `get_reading_service` no fue proporcionada, por lo que solo puede confirmarse que el router solicita un `ReadingService` mediante esa dependencia. No puede determinarse cómo se construyen sus repositorios o demás dependencias.
+
+Superada esta validación de entrada, el router delega la operación al servicio:
+
+```python
+reading = service.create_reading(
+    sensor_id,
+    reading_data,
+)
+```
+En este punto termina la responsabilidad principal del router respecto a la creación: recibe datos ya interpretados según sus tipos y delega las reglas de negocio a `ReadingService`.
+
+2. Lógica de aplicación y reglas de negocio
+
+`ReadingService.create_reading` recibe:
+
+```python
+sensor_id: int
+reading_data: ReadingCreate
+```
+Comprobación de existencia del sensor
+
+La primera operación es:
+
+```python
+sensor = self._sensor_repository.get_by_id(sensor_id)
+```
+
+Por tanto, `ReadingService` delega al `SensorRepository` la búsqueda del sensor propietario.
+
+Después comprueba explícitamente el resultado:
+
+```python
+if sensor is None:
+    raise SensorNotFoundError(sensor_id)
+```
+
+Si el repositorio indica que el sensor no existe, el flujo se detiene mediante la excepción de dominio `SensorNotFoundError`.
+
+No puede afirmarse cómo dicha excepción se convierte posteriormente en una respuesta HTTP porque los manejadores globales de excepciones no fueron proporcionados.
+
+Validación del valor de la lectura
+
+Si el sensor existe, el servicio ejecuta:
+
+```python
+self._validate_reading_value(
+    sensor_type=sensor.sensor_type,
+    value=reading_data.value,
+)
+```
+
+Esta es una regla de negocio, distinta de la validación estructural realizada previamente por FastAPI/Pydantic.
+
+`_validate_reading_value` consulta:
+
+```python
+rule = SENSOR_RULES.get(sensor_type)
+```
+
+Si encuentra una regla, comprueba que el valor esté dentro del intervalo:
+
+```python
+if value < rule.minimum_value or value > rule.maximum_value:
+    raise ReadingValueOutOfRangeError(...)
+```
+
+Por tanto, un valor fuera del rango permitido origina la excepción de dominio `ReadingValueOutOfRangeError`.
+
+Si no existe una regla para `sensor_type`, el método hace:
+
+```python
+if rule is None:
+    return
+```
+
+El comentario indica que el tipo habría sido validado previamente durante la creación del sensor y que este caso protege frente a datos antiguos. Esa intención está documentada mediante comentarios, pero no puede verificarse con los dos archivos proporcionados.
+
+Construcción de `Reading`
+
+Una vez validado el valor, el servicio construye:
+
+```python
+reading = Reading(
+    sensor_id=sensor_id,
+    value=reading_data.value,
+)
+```
+
+En consecuencia, el servicio es responsable de construir la entidad que se entregará a persistencia utilizando:
+
+* el identificador del sensor recibido en la ruta
+* el valor validado procedente de `ReadingCreate`
+
+El comentario afirma que el timestamp será generado por la base de datos al persistir la lectura. Ese comportamiento no puede verificarse porque no se proporcionaron ni el modelo `Reading` ni la configuración de persistencia.
+
+3. Persistencia delegada
+
+Después de construir `Reading`, `ReadingService` ejecuta:
+
+```python
+return self._reading_repository.create(reading)
+```
+
+La responsabilidad está separada de esta forma:
+
+* `ReadingService` decide qué lectura puede crearse
+* `ReadingRepository` recibe la entidad para realizar la operación de creación correspondiente
+
+Con los archivos disponibles solo puede confirmarse que se llama a:
+
+```python
+ReadingRepository.create(reading)
+```
+y que su resultado se devuelve desde `create_reading`.
+
+No puede determinarse:
+
+* cómo se almacena físicamente la lectura
+* si utiliza SQLAlchemy
+* si realiza `commit`
+* si utiliza `flush` o `refresh`
+* qué transacciones intervienen
+* cómo obtiene un identificador
+* si realmente recarga la entidad después de persistirla
+
+El comentario del servicio dice que el repositorio delega la "inserción y recuperación del estado final", pero esa implementación no está disponible para verificarla.
+
+4. Construcción de la respuesta
+
+El objeto devuelto por `ReadingService.create_reading` regresa al router:
+
+```python
+reading = service.create_reading(...)
+```
+
+El router lo convierte explícitamente al esquema público:
+
+```python
+return ReadingResponse.model_validate(reading)
+```
+
+Por tanto, la respuesta expuesta por el endpoint no se construye devolviendo directamente `Reading`, sino mediante `ReadingResponse`.
+
+El flujo final es:
+
+Reading
+   |
+   v
+ReadingResponse.model_validate(reading)
+   |
+   v
+ReadingResponse
+   |
+   v
+respuesta del endpoint
+
+Además, el endpoint declara:
+
+```python
+response_model=ReadingResponse
+status_code=status.HTTP_201_CREATED
+```
+
+Por lo que la operación exitosa está configurada con código HTTP `201 Created` y un contrato de respuesta `ReadingResponse`.
+
+Durante este flujo de negocio pueden originarse explícitamente estas excepciones de dominio:
+
+* `SensorNotFoundError`, si el sensor indicado no existe
+* `ReadingValueOutOfRangeError`, si el valor no pertenece al rango permitido para el tipo de sensor
+
+La transformación concreta de estas excepciones en códigos o cuerpos HTTP no está presente en los archivos proporcionados.
+
+5. Aspectos que no pueden confirmarse con los archivos proporcionados
+
+No es posible determinar a partir de `readings.py` y `reading_service.py`:
+
+* cómo `get_reading_service` construye `ReadingService`
+* qué implementación concreta utilizan `SensorRepository` y `ReadingRepository`
+* cómo se implementa `SensorRepository.get_by_id`
+* cómo se implementa `ReadingRepository.create`
+* si existe SQLAlchemy detrás de los repositorios
+* cómo se manejan commits, transacciones, sesiones o recargas
+* cómo se genera realmente el timestamp de `Reading`
+* cómo se asigna el identificador de una lectura
+* cómo `ReadingResponse` está configurado internamente para validar el objeto recibido
+* cómo `SensorNotFoundError` y `ReadingValueOutOfRangeError` se transforman en respuestas HTTP
+
+En síntesis, el flujo verificable es:
+
+POST /sensors/{sensor_id}/readings
+        |
+        v
+FastAPI/Pydantic
+valida y construye los parámetros
+        |
+        v
+Router create_reading
+        |
+        v
+ReadingService.create_reading
+        |
+        +--> SensorRepository.get_by_id(sensor_id)
+        |        |
+        |        +--> None -> SensorNotFoundError
+        |
+        +--> _validate_reading_value(...)
+        |        |
+        |        +--> fuera de rango -> ReadingValueOutOfRangeError
+        |
+        +--> Reading(sensor_id=..., value=...)
+        |
+        +--> ReadingRepository.create(reading)
+        |
+        v
+Router
+ReadingResponse.model_validate(reading)
+        |
+        v
+201 Created
 
 ### Análisis del resultado
 
-Pendiente
+La respuesta siguió el alcance definido por el prompt y estructuró la explicación según las responsabilidades del router, el servicio y los repositorios.
+En la entrada HTTP distinguió correctamente la interpretación de `sensor_id`, la construcción de `ReadingCreate` y la resolución de `ReadingServiceDependency`. También señaló explícitamente que la implementación de `get_reading_service` no estaba disponible, evitando asumir cómo se construyen realmente los repositorios y demás dependencias.
+En la capa de aplicación identificó correctamente dos reglas diferentes. Primero, `SensorRepository.get_by_id` se utiliza para comprobar que exista el sensor propietario y puede originarse `SensorNotFoundError`. Después, `_validate_reading_value` aplica una regla de negocio basada en `SENSOR_RULES` y puede producir `ReadingValueOutOfRangeError` cuando el valor queda fuera de los límites permitidos.
+La explicación también diferenció correctamente la construcción de `Reading` de su persistencia. `ReadingService` crea la entidad con los datos ya validados y delega posteriormente la operación a `ReadingRepository.create`. La IA evitó afirmar cómo funciona internamente esa persistencia y enumeró explícitamente aspectos que no pueden confirmarse, como el uso de SQLAlchemy, commits, sesiones, `flush`, `refresh` o transacciones.
+Respecto al timestamp, la respuesta indicó que su generación por parte de la base de datos aparece documentada mediante un comentario del servicio, pero reconoció que no puede verificarse sin consultar el modelo y la configuración de persistencia.
+Finalmente, identificó correctamente que el router transforma el objeto recibido del servicio mediante `ReadingResponse.model_validate` y que el endpoint declara `ReadingResponse` como contrato público junto con el estado HTTP `201 Created`.
+A diferencia del resultado del prompt pobre, la respuesta no presentó como hechos confirmados comportamientos pertenecientes a componentes que no habían sido proporcionados. Esto demuestra que establecer explícitamente los límites de evidencia ayuda a obtener explicaciones técnicas más precisas y auditables.
 
 ### Comparación y conclusión
 
-Pendiente
+Ambos resultados reconstruyeron correctamente el flujo general de creación de una lectura y reconocieron las principales responsabilidades del router y de `ReadingService`.
+El prompt pobre produjo una explicación clara y técnicamente plausible, pero permitió que la IA completara algunos detalles mediante inferencias. Por ejemplo, afirmó directamente que `SensorNotFoundError` se traduce a una respuesta HTTP `404 Not Found`, aunque los archivos proporcionados no incluían el manejador encargado de realizar esa conversión. También describió como comportamiento efectivo la generación del timestamp por parte de la base de datos, cuando en los archivos disponibles ese detalle únicamente aparecía documentado mediante un comentario.
+El prompt estructurado estableció explícitamente que la explicación debía basarse únicamente en los archivos proporcionados y que debía distinguir entre comportamiento observable, comportamiento documentado e información no verificable. Como resultado, la IA mantuvo la explicación dentro de esa frontera y señaló qué aspectos requerirían consultar otros componentes del proyecto.
+También separó con mayor precisión la validación estructural realizada por FastAPI/Pydantic de las reglas de negocio aplicadas por `ReadingService`, y evitó inventar detalles internos de los repositorios, las transacciones o el manejo global de excepciones.
+La comparación muestra que un buen prompt para explicar código no solo debe indicar qué partes describir. También debe establecer qué evidencia puede utilizar la IA y exigir que identifique aquello que no puede confirmar. Esto reduce el riesgo de obtener documentación técnicamente convincente pero parcialmente basada en suposiciones.
+Al igual que en las tareas anteriores, las respuestas fueron generadas mediante modelos de IA diferentes. Por esta razón, las diferencias observadas pueden estar influenciadas tanto por la estructura del prompt como por las características particulares de cada modelo.

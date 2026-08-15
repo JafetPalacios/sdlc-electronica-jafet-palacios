@@ -21,3 +21,11 @@ Utilizar una tarea real de refactorización sobre `SensorService` para continuar
 El prompt pobre solicitó de forma general refactorizar el servicio para eliminar código repetido y mejorarlo. El prompt estructurado identificó específicamente la duplicación existente al recuperar sensores por identificador en `get_sensor`, `update_sensor` y `delete_sensor`. También estableció que debía extraerse únicamente esa lógica a `_get_sensor_or_raise` y definió explícitamente qué elementos del servicio debían permanecer sin cambios.
 Con el prompt pobre, la IA identificó correctamente la duplicación principal, pero amplió el alcance de la refactorización. Además de `_get_sensor_or_raise`, propuso `_ensure_code_is_unique`, modificó la construcción de la entidad `Sensor` y realizó cambios generales de documentación y estilo.
 Con el prompt estructurado, la IA concentró la modificación en `_get_sensor_or_raise` y su utilización en los tres métodos indicados. Conservó la validación de unicidad, `_validate_sensor_rule`, la construcción explícita de `Sensor`, las firmas públicas y las demás responsabilidades del servicio.
+
+### Tarea 3
+
+Se utilizó como tercera tarea la explicación del flujo real de creación de una lectura en SensorHub, desde `POST /sensors/{sensor_id}/readings` hasta la construcción de `ReadingResponse`.
+
+El prompt pobre solicitó únicamente explicar cómo funcionaba la creación de una lectura a partir de `app/routers/readings.py` y `app/services/reading_service.py`.
+La IA reconstruyó correctamente la mayor parte del flujo, pero presentó algunas inferencias como comportamientos confirmados. Entre ellas se encontró la traducción de `SensorNotFoundError` a HTTP 404, aunque el manejador de excepciones no había sido proporcionado. También describió la generación del timestamp por parte de la base de datos como comportamiento efectivo a partir de un comentario del servicio.
+El prompt estructurado indicó explícitamente qué responsabilidades debían explicarse y estableció que no podían asumirse detalles pertenecientes a archivos no proporcionados. También solicitó diferenciar la validación de FastAPI/Pydantic de las reglas de negocio y distinguir entre comportamiento verificable, comportamiento documentado y aspectos no confirmables.
