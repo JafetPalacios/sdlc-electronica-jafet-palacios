@@ -25,8 +25,6 @@ Haz una función para convertir Celsius a Fahrenheit
 
 ### Resultado del prompt pobre
 
-### Resultado del prompt pobre
-
 ```python
 def celsius_a_fahrenheit(celsius: float) -> float:
     """Convierte grados Celsius a Fahrenheit."""
