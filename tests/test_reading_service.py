@@ -1,9 +1,12 @@
 from datetime import UTC, datetime
+from unittest.mock import Mock
 
 import pytest
 
+from app.domain.alert_strategy import ThresholdAlertStrategy
 from app.exceptions import InvalidDateTimezoneError, InvalidPaginationError
 from app.models import Sensor
+from app.schemas import ReadingCreate
 from app.services.reading_service import ReadingService
 from tests.fakes.fake_reading_repository import FakeReadingRepository
 from tests.fakes.fake_sensor_repository import FakeSensorRepository
@@ -115,3 +118,46 @@ def test_list_readings_rejects_mixed_timezone_awareness() -> None:
 
     # Verificamos que las fechas incompatibles no alcancen persistencia
     assert reading_repository.list_for_sensor_calls == 0
+
+# Generación de alerta al superar el umbral configurado
+def test_create_reading_above_threshold_creates_alert() -> None:
+    # Preparamos un sensor con un umbral activo y repositorios aislados
+    sensor_repository = FakeSensorRepository()
+    reading_repository = FakeReadingRepository()
+    alert_repository = Mock()
+
+    sensor = sensor_repository.create(
+        Sensor(
+            code="TEMP-ALERT-001",
+            name="Sensor de temperatura con alerta",
+            sensor_type="temperature",
+            unit="°C",
+            alert_threshold=30.0,
+        )
+    )
+
+    # Inyectamos la estrategia concreta y el colaborador que registrará alertas
+    service = ReadingService(
+        reading_repository,
+        sensor_repository,
+        alert_repository=alert_repository,
+        alert_strategy=ThresholdAlertStrategy(),
+    )
+
+    reading = service.create_reading(
+        sensor.id,
+        ReadingCreate(
+            value=31.0,
+        ),
+    )
+
+    # Verificamos que la lectura anómala produzca exactamente una alerta
+    alert_repository.create.assert_called_once()
+
+    alert = alert_repository.create.call_args.args[0]
+
+    # Comprobamos que la alerta conserve la evidencia que originó la detección
+    assert alert.sensor_id == sensor.id
+    assert alert.reading_id == reading.id
+    assert alert.value == 31.0
+    assert alert.threshold == 30.0

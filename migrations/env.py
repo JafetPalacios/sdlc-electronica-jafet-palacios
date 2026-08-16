@@ -5,10 +5,10 @@ from sqlalchemy import engine_from_config, pool
 
 # Importamos la configuración central de base de datos y los modelos ORM de SensorHub
 from app.db import DATABASE_URL, Base
-from app.models import Reading, Sensor
+from app.models import Alert, Reading, Sensor
 
 # Conservamos referencias explícitas para dejar claro que estos modelos deben registrarse en Base.metadata
-REGISTERED_MODELS = (Reading, Sensor)
+REGISTERED_MODELS = (Alert, Reading, Sensor)
 # Obtenemos el objeto de configuración de Alembic
 config = context.config
 

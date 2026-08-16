@@ -2,6 +2,10 @@ from typing import cast
 
 from fastapi import status
 from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models import Alert
 
 
 # Pruebas de integración para lecturas
@@ -293,3 +297,52 @@ def test_list_readings_with_mixed_timezone_awareness_returns_400(
             "información de zona horaria"
         ),
     }
+
+# Generación persistente de alerta desde el flujo HTTP de lecturas
+def test_create_reading_above_threshold_persists_alert(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    # Registramos un sensor con un umbral activo
+    sensor_response = client.post(
+        "/sensors/",
+        json={
+            "code": "TEMP-ALERT-READING-001",
+            "name": "Sensor de temperatura con alerta",
+            "sensor_type": "temperature",
+            "unit": "°C",
+            "alert_threshold": 30.0,
+        },
+    )
+
+    assert sensor_response.status_code == status.HTTP_201_CREATED
+
+    sensor_id = sensor_response.json()["id"]
+
+    # Registramos una lectura que supera el umbral configurado
+    reading_response = client.post(
+        f"/sensors/{sensor_id}/readings",
+        json={
+            "value": 31.0,
+        },
+    )
+
+    assert reading_response.status_code == status.HTTP_201_CREATED
+
+    reading_id = reading_response.json()["id"]
+
+    # Consultamos directamente la persistencia para comprobar la integración
+    alerts = list(
+        db_session.scalars(
+            select(Alert),
+        ).all()
+    )
+
+    assert len(alerts) == 1
+
+    alert = alerts[0]
+
+    assert alert.sensor_id == sensor_id
+    assert alert.reading_id == reading_id
+    assert alert.value == 31.0
+    assert alert.threshold == 30.0

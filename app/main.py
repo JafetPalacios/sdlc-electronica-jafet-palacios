@@ -14,6 +14,7 @@ from app.exceptions import (
     SensorNotFoundError,
     UnsupportedSensorTypeError,
 )
+from app.routers.alerts import router as alerts_router
 from app.routers.readings import router as readings_router
 from app.routers.sensors import router as sensors_router
 
@@ -34,7 +35,7 @@ app = FastAPI(                                                          # Creaci
 # Cada router conserva sus propias rutas, etiquetas y contratos de respuesta
 app.include_router(sensors_router)
 app.include_router(readings_router)
-
+app.include_router(alerts_router)
 
 # ==========[     Manejadores de errores de sensores     ]==========
 

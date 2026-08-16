@@ -353,3 +353,320 @@ La validación final del bloque produjo:
 - columna `sensors.alert_threshold` presente físicamente
 - sensores históricos preservados con umbral nulo
 - una advertencia existente de `Starlette TestClient` y `httpx`, no relacionada con los cambios realizados
+
+## Intervención 8 — Generación, persistencia y consulta de alertas mediante TDD
+
+Continuar la funcionalidad de anomalías iniciada en la intervención anterior hasta conseguir que una lectura que supere el umbral configurado genere una alerta persistente y que dichas alertas puedan consultarse posteriormente mediante la API. Como decisión del estudiante, se mantuvo la arquitectura existente de SensorHub:
+
+`routers -> services -> repositories -> models`
+
+También se mantuvo la decisión previa de separar el criterio de detección mediante `AlertStrategy`, evitando incorporar directamente la comparación del umbral como una responsabilidad fija de la persistencia o del router.
+
+### Consulta realizada a la IA
+
+Se solicitó continuar estrictamente paso a paso mediante TDD, sin implementar la funcionalidad completa de una sola vez y verificando cada comportamiento antes de avanzar. La se indicó a la IA desarrollar la funcionalidad en ciclos pequeños:
+
+1. comprobar que `ReadingService` pueda generar una alerta cuando una lectura supere el umbral
+2. crear la persistencia concreta de alertas mediante un repositorio SQLAlchemy
+3. conectar el repositorio y la estrategia con el flujo HTTP existente
+4. incorporar la consulta de alertas por sensor
+5. crear una capa `AlertService`
+6. exponer la consulta mediante un endpoint HTTP
+7. comprobar los casos de frontera
+8. versionar la nueva tabla mediante Alembic y verificar su reversibilidad
+
+La propuesta fue aceptada y aplicada de forma incremental, conservando evidencia de los estados RED y GREEN.
+
+### Primer ciclo TDD — Generación de alerta desde `ReadingService`
+
+Se escribió primero una prueba unitaria para comprobar que una lectura superior al umbral provocara la creación de una alerta. La prueba utilizó un sensor de temperatura con `alert_threshold = 30.0` y una lectura `value = 31.0` También se utilizó un `Mock` como colaborador observable para comprobar que el servicio solicitara la persistencia de exactamente una alerta.
+
+**El estado RED produjo:**
+
+`TypeError: ReadingService.__init__() got an unexpected keyword argument 'alert_repository'`
+
+El error confirmó que `ReadingService` todavía no admitía colaboradores relacionados con alertas.
+Para llevar el escenario a GREEN se incorporaron:
+
+- el modelo `Alert`
+- el contrato `AlertRepository`
+- las dependencias opcionales `alert_repository` y `alert_strategy` dentro de `ReadingService`
+- la creación de una alerta después de persistir la lectura y obtener su identificador
+
+La alerta conserva:
+
+- `sensor_id`
+- `reading_id`
+- `value`
+- `threshold`
+- `created_at`
+
+Se decidió conservar el valor observado y el umbral dentro de la alerta para disponer de una evidencia histórica del criterio utilizado en el momento de la detección.
+
+La evaluación quedó delegada a:
+
+`self._alert_strategy.is_anomaly(...)`
+
+en lugar de introducir directamente la comparación dentro de `ReadingService`.
+
+**La prueba quedó en GREEN.**
+Posteriormente se ejecutaron todas las pruebas unitarias existentes de `ReadingService` y se confirmó que los cuatro comportamientos anteriores continuaban funcionando. El archivo quedó con 5 pruebas aprobadas.
+
+### Segundo ciclo TDD — Persistencia concreta de alertas
+
+Se creó una prueba para comprobar que una implementación SQLAlchemy pudiera persistir una entidad `Alert` y recuperar posteriormente los valores generados por la base de datos.
+
+**El estado RED produjo:**
+
+`ModuleNotFoundError: No module named 'app.repositories.sqlalchemy_alert_repository'` Se implementó `SqlAlchemyAlertRepository` siguiendo el mismo patrón utilizado por los repositorios existentes:
+
+`add -> commit -> refresh`
+
+La implementación quedó detrás del contrato `AlertRepository`. La prueba confirmó que:
+
+- se generó un identificador para la alerta
+- se generó `created_at`
+- la entidad quedó almacenada físicamente
+- `sensor_id`, `reading_id`, `value` y `threshold` conservaron los valores originales
+
+**La prueba quedó en GREEN.**
+
+### Tercer ciclo TDD — Integración de alertas con el flujo HTTP de lecturas
+
+Aunque `ReadingService` ya podía generar alertas en pruebas unitarias y `SqlAlchemyAlertRepository` podía persistirlas, todavía no estaban conectados dentro de la composición real de dependencias de FastAPI. Se escribió una prueba de integración que:
+
+1. creó un sensor mediante `POST /sensors/`
+2. configuró `alert_threshold=30.0`
+3. registró una lectura con `value=31.0`
+4. consultó directamente la base temporal para comprobar que existiera una alerta
+
+La lectura se creó correctamente mediante HTTP, pero la base no contenía ninguna alerta.
+
+**El estado RED produjo:**
+
+`assert 0 == 1`
+
+La causa fue que `get_reading_service()` todavía construía `ReadingService` únicamente con los repositorios de lecturas y sensores.
+
+Se modificó `app/dependencies.py` para construir también:
+
+- `SqlAlchemyAlertRepository`
+- `ThresholdAlertStrategy`
+
+y se inyectaron ambos en `ReadingService`.
+
+Se mantuvo la decisión arquitectónica de seleccionar la implementación concreta de la estrategia en el punto de composición y no dentro del servicio. De esta forma `ReadingService` sigue dependiendo del contrato `AlertStrategy`.
+
+**La prueba de integración quedó en GREEN.**
+
+### Cuarto ciclo TDD — Consulta de alertas por sensor en persistencia
+
+Para permitir la consulta posterior de alertas se escribió una prueba que creó dos sensores con sus respectivas alertas y solicitó únicamente las pertenecientes al primero.
+
+**El estado RED produjo:**
+
+`AttributeError: 'SqlAlchemyAlertRepository' object has no attribute 'list_for_sensor'`
+
+Se añadió al contrato `AlertRepository`:
+
+`list_for_sensor(sensor_id: int) -> list[Alert]`
+
+y se implementó la operación en `SqlAlchemyAlertRepository` mediante una consulta filtrada por `sensor_id`. También se definió un orden determinista utilizando:
+
+`Alert.created_at` y posteriormente: `Alert.id` como segundo criterio.
+
+Las dos pruebas del repositorio, creación y consulta, quedaron en GREEN.
+
+### Quinto ciclo TDD — Capa de servicio para alertas
+
+Se decidió no conectar el router directamente con `SqlAlchemyAlertRepository`, ya que esto rompería el patrón arquitectónico utilizado por SensorHub. Se escribió primero una prueba para una nueva capa `AlertService`.
+
+**El estado RED produjo:**
+
+`ModuleNotFoundError: No module named 'app.services.alert_service'`
+
+Se creó `AlertService` dependiendo exclusivamente de:
+
+- `AlertRepository`
+- `SensorRepository`
+
+El servicio comprueba primero que el sensor solicitado exista y después delega la consulta de sus alertas al repositorio. Se mantuvo el mismo comportamiento utilizado en otras consultas del proyecto:
+
+- sensor inexistente -> `SensorNotFoundError`
+- sensor existente sin resultados -> lista vacía
+
+**La prueba quedó en GREEN.**
+
+### Sexto ciclo TDD — Consulta HTTP de alertas
+
+Se creó una prueba de integración para el nuevo comportamiento: `GET /sensors/{sensor_id}/alerts`
+
+La prueba generó primero una alerta real mediante: `POST /sensors/{sensor_id}/readings`
+
+y después intentó recuperarla mediante la nueva ruta.
+
+**El estado RED produjo:**
+
+`assert 404 == 200`
+
+El `404` confirmó que todavía no existía ninguna ruta registrada para consultar alertas. Para llevar el escenario a GREEN se incorporaron:
+
+- `AlertResponse`
+- `get_alert_service()`
+- `app/routers/alerts.py`
+- el registro de `alerts_router` en `app/main.py`
+
+El router conserva únicamente responsabilidades HTTP:
+
+- recibe `sensor_id`
+- obtiene `AlertService` mediante dependencia
+- delega la consulta al servicio
+- convierte los modelos ORM a `AlertResponse`
+
+No realiza consultas directas mediante SQLAlchemy.
+
+**La prueba quedó en GREEN.**
+
+Durante la validación Ruff detectó un único problema de orden de imports en `app/routers/alerts.py`:
+
+`I001 Import block is un-sorted or un-formatted`
+Se utilizó `ruff --fix` exclusivamente sobre ese archivo. Después Ruff y mypy finalizaron sin errores.
+
+### Pruebas de frontera y regresión
+
+Después de completar los ciclos RED -> GREEN se agregaron pruebas adicionales para fijar explícitamente comportamientos que la implementación ya satisfacía. Estas pruebas no se registraron artificialmente como nuevos ciclos RED porque la funcionalidad correspondiente ya estaba implementada.
+
+Se comprobaron los siguientes casos:
+
+- `value > threshold` genera una alerta
+- `value == threshold` no genera una alerta
+- un sensor existente sin alertas responde `200` con `[]`
+- consultar alertas de un sensor inexistente responde `404`
+
+La regla final de `ThresholdAlertStrategy` permanece:
+
+`value > threshold`
+
+Por lo tanto, un valor exactamente igual al umbral no se considera anómalo.
+Las pruebas específicas de dominio, servicio, repositorio, lecturas e integración HTTP produjeron `25 passed`
+
+### Migración de la tabla `alerts`
+
+Después de comprobar el comportamiento en la base SQLite temporal de pruebas se decidió versionar también la nueva estructura de persistencia mediante Alembic. La base real se encontraba correctamente en `b89c5db35c12 (head)` y existía un único head. Se actualizó `migrations/env.py` para registrar explícitamente `Alert, Reading, Sensor` y se comprobó que `Base.metadata` contenía `['alerts', 'readings', 'sensors']`. Después se ejecutó `alembic revision --autogenerate -m "crear tabla de alertas"`. Alembic detectó exclusivamente `Detected added table 'alerts'`. Se generó la revisión `ccdeecc8c528` con `down_revision = "b89c5db35c12"`. La migración candidata fue revisada manualmente antes de aplicarse. Se confirmó que únicamente creaba la tabla `alerts` con:
+
+- `id`
+- `sensor_id`
+- `reading_id`
+- `value`
+- `threshold`
+- `created_at`
+- clave foránea `sensor_id -> sensors.id`
+- clave foránea `reading_id -> readings.id`
+
+El `downgrade()` únicamente elimina la tabla `alerts`. Se limpiaron los comentarios genéricos generados por Alembic y se mantuvo la misma semántica de la migración. Ruff detectó inicialmente el orden de imports y lo corrigió mediante `--fix`.
+
+### Respaldo y aplicación de la migración
+
+Antes de ejecutar DDL sobre la base persistente se creó el respaldo
+Después se aplicó:
+
+`alembic upgrade head`
+
+Alembic ejecutó:
+
+`b89c5db35c12 -> ccdeecc8c528`
+
+La revisión aplicada y el head quedaron ambos en:
+
+`ccdeecc8c528 (head)`
+
+La inspección física de SQLite confirmó las tablas:
+
+- `alembic_version`
+- `alerts`
+- `readings`
+- `sensors`
+
+La tabla `alerts` quedó formada por:
+
+- `id INTEGER`
+- `sensor_id INTEGER`
+- `reading_id INTEGER`
+- `value FLOAT`
+- `threshold FLOAT`
+- `created_at DATETIME DEFAULT CURRENT_TIMESTAMP`
+
+También se verificaron físicamente las claves foráneas:
+
+- `sensor_id -> sensors.id`
+- `reading_id -> readings.id`
+
+Los sensores existentes permanecieron sin modificaciones:
+
+- `(1, 'TEMP-5771F74A', None)`
+- `(2, 'HUM-b4f6fc', None)`
+
+### Verificación de reversibilidad de la migración
+
+Antes de comprobar el `downgrade()` se verificó que la tabla `alerts` no contuviera registros `Alertas almacenadas: 0` se ejecutó `alembic downgrade b89c5db35c12` Alembic realizó `ccdeecc8c528 -> b89c5db35c12`. La inspección física confirmó que `alerts` desapareció mientras permanecieron:
+
+- `alembic_version`
+- `readings`
+- `sensors`
+
+Los datos históricos de sensores permanecieron intactos. Después se ejecutó nuevamente `alembic upgrade head`. La tabla `alerts` fue recreada y la base regresó a `ccdeecc8c528 (head)`. Con esto se comprobó tanto el camino de actualización como el de reversión de la migración.
+
+### Decisión
+
+Mantener la detección de anomalías distribuida mediante responsabilidades explícitas:
+
+- `Sensor.alert_threshold` almacena la configuración individual del sensor
+- `AlertStrategy` define el contrato para decidir si una lectura es anómala
+- `ThresholdAlertStrategy` implementa actualmente la comparación por umbral
+- `ReadingService` coordina la generación de alertas cuando se registra una lectura
+- `AlertRepository` abstrae la persistencia
+- `SqlAlchemyAlertRepository` implementa la persistencia concreta
+- `AlertService` coordina la consulta de alertas y valida la existencia del sensor
+- `alerts_router` expone las operaciones HTTP
+- `AlertResponse` define el contrato público de respuesta
+- Alembic versiona la tabla persistente `alerts`
+
+La elección de `ThresholdAlertStrategy` se realiza en `app/dependencies.py`, permitiendo sustituirla por otra implementación compatible sin modificar `ReadingService`. Esto conserva el principio abierto/cerrado aplicado a la estrategia de alertas.
+
+### Resultado
+
+La validación final de la funcionalidad produjo:
+
+- 42 pruebas aprobadas
+- cobertura global de 93.13 %
+- cobertura mínima requerida de 80 % superada
+- Ruff sin errores en `app`, `tests` y `migrations`
+- mypy sin errores en 46 archivos
+- `git diff --check` sin errores
+- `AlertStrategy` y `ThresholdAlertStrategy` funcionando
+- generación automática de alertas al superar el umbral
+- persistencia mediante `SqlAlchemyAlertRepository`
+- consulta mediante `GET /sensors/{sensor_id}/alerts`
+- comportamiento `200 []` para sensores existentes sin alertas
+- comportamiento `404` para sensores inexistentes
+- tabla `alerts` presente físicamente
+- claves foráneas verificadas
+- migración `ccdeecc8c528` comprobada mediante `upgrade`, `downgrade` y nuevo `upgrade`
+- base final en `ccdeecc8c528 (head)`
+- datos históricos de sensores preservados
+- una advertencia existente de `Starlette TestClient` y `httpx`, no relacionada con los cambios realizados
+
+### Trazabilidad de prompts y decisiones
+
+Las consultas de esta intervención se realizaron de forma iterativa a partir de los resultados obtenidos en cada ciclo TDD. Cuando la interacción consistió en continuar a partir de una salida de terminal, se conserva aquí un resumen de la intención del prompt.
+
+| Prompt o consulta realizada | Qué propuso o generó la IA | Qué cambió | Por qué |
+|---|---|---|---|
+| Continuar la detección de anomalías mediante TDD estricto, avanzando únicamente después de verificar cada comportamiento | Propuso comenzar comprobando que `ReadingService` generara una alerta cuando una lectura superara el umbral e introducir `AlertStrategy` y `AlertRepository` como abstracciones | Se aceptó separar la estrategia y la persistencia mediante contratos | Permite aplicar OCP y mantener `ReadingService` desacoplado de una estrategia concreta y de SQLAlchemy |
+| Después del RED `ReadingService.__init__() got an unexpected keyword argument 'alert_repository'`, solicitar la implementación mínima para obtener GREEN | Propuso incorporar el modelo `Alert`, el contrato `AlertRepository` y las dependencias `alert_repository` y `alert_strategy` en `ReadingService` | Se aceptó la propuesta y se decidió conservar en la alerta `sensor_id`, `reading_id`, `value` y `threshold` | Esos datos permiten conocer qué lectura produjo la alerta y conservar el criterio utilizado aunque posteriormente cambie el umbral del sensor |
+| Solicité cómo persistir las alertas sin romper la arquitectura existente | Propuso crear `SqlAlchemyAlertRepository` siguiendo el patrón de los repositorios actuales | Se aceptó e implementó primero mediante una prueba que produjo el RED por módulo inexistente | Mantiene la persistencia detrás de `AlertRepository` y reutiliza el patrón ya utilizado por SensorHub |
+| Después de que la creación HTTP de una lectura no almacenara ninguna alerta, solicité el diagnóstico | Identificó que `get_reading_service()` todavía no inyectaba `SqlAlchemyAlertRepository` ni `ThresholdAlertStrategy` | Se decidió modificar únicamente `app/dependencies.py` para realizar la composición de esas dependencias | La lógica del servicio y del repositorio ya funcionaba por separado; el problema estaba en el punto de composición |
+| Solicité cómo hacer consultables las alertas por sensor manteniendo la arquitectura en capas | Propuso añadir `list_for_sensor()` al repositorio, crear `AlertService`, `AlertResponse` y un router independiente para alertas | Se aceptó crear un servicio y router específicos en lugar de consultar el repositorio directamente desde un endpoint existente | Mantiene el flujo `router -> service -> repository -> model` y evita introducir SQLAlchemy en la capa HTTP |
+| Solicité la validación de los casos de frontera | Propuso comprobar igualdad con el umbral, sensor existente sin alertas y sensor inexistente | Se añadieron las pruebas, pero no se registraron como ciclos RED porque la implementación ya satisfacía esos comportamientos | Distinguir pruebas de regresión de ciclos RED reales mantiene una bitácora fiel al proceso realizado |
+| Solicité cómo incorporar la nueva tabla `alerts` a la base persistente | Propuso registrar `Alert` en Alembic, utilizar `--autogenerate`, revisar la migración antes de aplicarla y respaldar la base | Se aceptó el procedimiento y no se aplicó la migración hasta comprobar que Alembic detectara únicamente `Added table 'alerts'` | Evita aplicar automáticamente cambios inesperados al esquema existente |
+| Solicité una verificación final de la migración | Propuso comprobar físicamente tablas, columnas y claves foráneas y verificar `downgrade` seguido de un nuevo `upgrade` | Se aceptó probar la reversibilidad después de comprobar que la tabla `alerts` contenía cero registros y que existía un respaldo previo | Permite comprobar ambos sentidos de la migración sin poner en riesgo información almacenada |

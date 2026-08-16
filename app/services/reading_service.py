@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from app.domain.alert_strategy import AlertStrategy
 from app.domain.sensor_rules import SENSOR_RULES
 from app.exceptions import (
     InvalidDateRangeError,
@@ -9,7 +10,8 @@ from app.exceptions import (
     ReadingValueOutOfRangeError,
     SensorNotFoundError,
 )
-from app.models import Reading
+from app.models import Alert, Reading
+from app.repositories.alert_repository import AlertRepository
 from app.repositories.reading_repository import ReadingRepository
 from app.repositories.sensor_repository import SensorRepository
 from app.schemas import ReadingCreate, ReadingUpdate
@@ -22,14 +24,22 @@ from app.schemas import ReadingCreate, ReadingUpdate
 class ReadingService:
 
     # Inicialización del servicio
-    def __init__(                                                               # Recibimos las dependencias mediante el constructor
-        self,                                                                   # Esto permite utilizar repositorios reales o implementaciones falsas en pruebas
+    def __init__(
+        self,
         reading_repository: ReadingRepository,
         sensor_repository: SensorRepository,
+        *,
+        alert_repository: AlertRepository | None = None,
+        alert_strategy: AlertStrategy | None = None,
     ) -> None:
 
-        self._reading_repository = reading_repository                           # Conservamos el repositorio encargado de consultar y persistir lecturas
-        self._sensor_repository = sensor_repository                             # Conservamos el repositorio utilizado para comprobar sensores propietarios
+        # Conservamos los repositorios utilizados por las operaciones de lecturas
+        self._reading_repository = reading_repository
+        self._sensor_repository = sensor_repository
+
+        # Conservamos colaboradores opcionales para detectar y registrar anomalías
+        self._alert_repository = alert_repository
+        self._alert_strategy = alert_strategy
 
     # Validación de valores físicos
     def _validate_reading_value(                                                # Comprobamos que cada lectura respete el intervalo definido para el tipo del sensor propietario
@@ -69,12 +79,35 @@ class ReadingService:
             value=reading_data.value,
         )
 
-        reading = Reading(                                                      # Construimos la entidad ORM con el sensor propietario
-            sensor_id=sensor_id,                                                # El timestamp será generado por la base de datos al persistirla
+        reading = Reading(
+            sensor_id=sensor_id,
             value=reading_data.value,
         )
 
-        return self._reading_repository.create(reading)                         # Delegamos la inserción y recuperación del estado final al repositorio
+        # Persistimos primero la lectura para disponer de su identificador definitivo
+        created_reading = self._reading_repository.create(reading)
+
+        # Evaluamos la lectura cuando el sensor tiene un umbral configurado
+        # y disponemos de los colaboradores encargados de generar alertas
+        if (
+            sensor.alert_threshold is not None
+            and self._alert_repository is not None
+            and self._alert_strategy is not None
+            and self._alert_strategy.is_anomaly(
+                value=created_reading.value,
+                threshold=sensor.alert_threshold,
+            )
+        ):
+            alert = Alert(
+                sensor_id=sensor_id,
+                reading_id=created_reading.id,
+                value=created_reading.value,
+                threshold=sensor.alert_threshold,
+            )
+
+            self._alert_repository.create(alert)
+
+        return created_reading
 
     # Consulta individual
     def get_reading(self, reading_id: int) -> Reading:                          # Recuperamos una lectura concreta mediante su identificador interno
