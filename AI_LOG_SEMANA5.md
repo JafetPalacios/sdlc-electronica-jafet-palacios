@@ -191,3 +191,58 @@ Las pruebas nuevas finalizaron correctamente.
 * La cobertura global fue de 91.81 %, superior al mínimo requerido de 80 %.
 
 Se mantuvo una advertencia de deprecación proveniente de `Starlette TestClient` y `httpx`, no relacionada con los cambios realizados durante esta actividad.
+
+### Intervención 6 — Elaboración del ADR 0001 con apoyo de IA
+
+Documentar formalmente la arquitectura actual de SensorHub mediante un Architecture Decision Record. La decisión arquitectónica ya existía en el proyecto y consiste en mantener la separación:
+
+`routers -> services -> repositories -> models`
+
+con servicios que dependen de contratos de repositorio definidos mediante `Protocol`. La intención del ADR fue formalizar y justificar una decisión ya implementada, no solicitar a la IA que eligiera una arquitectura nueva.
+
+### Consulta realizada a la IA
+
+Se proporcionaron a la IA notas basadas en el estado real de SensorHub, incluyendo:
+
+- responsabilidades de routers, services, repositories y models
+- uso de `Protocol` en `SensorRepository` y `ReadingRepository`
+- necesidad de probar reglas de negocio sin una base de datos real
+- aislamiento de FastAPI y SQLAlchemy
+- utilización de repositorios falsos en pruebas unitarias
+- costes derivados de mantener más capas y abstracciones
+- alternativa de concentrar HTTP, negocio y persistencia en los routers
+
+Se solicitó redactar un borrador de ADR utilizando únicamente estas notas y estructurarlo mediante:
+
+- Estado
+- Contexto
+- Decisión
+- Consecuencias
+
+### Propuesta de la IA
+
+La IA generó un borrador que mantuvo la arquitectura existente como decisión principal e identificó correctamente tanto sus ventajas como sus costes.
+El borrador también presentó como alternativa una arquitectura más directa en la que los routers accedieran a SQLAlchemy y concentraran las reglas de negocio. No se detectaron tecnologías, patrones o requisitos relevantes inventados fuera de las notas proporcionadas.
+
+### Revisión
+
+El borrador generado por IA no se incorporó directamente. Se modificó para indicar expresamente que el ADR formaliza una arquitectura que ya está implementada en SensorHub. También se precisó que los contratos definidos mediante `Protocol` permiten que los servicios trabajen contra abstracciones sin conocer las implementaciones concretas de persistencia.
+Se redujeron algunas repeticiones entre Contexto, Decisión y Consecuencias sin modificar la decisión arquitectónica. No se incorporaron microservicios, CQRS, DDD ni otros patrones que no forman parte de la decisión documentada.
+
+### Decisión
+
+Mantener y formalizar la arquitectura:
+
+`routers -> services -> repositories -> models`
+
+* Los servicios seguirán dependiendo de contratos de repositorio definidos mediante `Protocol`.
+* FastAPI permanecerá principalmente en los routers y SQLAlchemy permanecerá detrás de los repositorios.
+* Se acepta que esta separación introduce más archivos, abstracciones y coordinación entre capas a cambio de facilitar pruebas unitarias, reducir acoplamiento y mantener diferenciadas las responsabilidades.
+
+### Resultado
+
+Se creó:
+
+`docs/adr/0001-arquitectura-en-capas.md`
+
+El ADR documenta el contexto, la alternativa considerada, la decisión adoptada y sus consecuencias positivas y negativas. La ubicación y el contenido del archivo fueron revisados manualmente antes de incorporarlos al repositorio.
