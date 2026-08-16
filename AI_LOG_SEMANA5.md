@@ -246,3 +246,110 @@ Se creó:
 `docs/adr/0001-arquitectura-en-capas.md`
 
 El ADR documenta el contexto, la alternativa considerada, la decisión adoptada y sus consecuencias positivas y negativas. La ubicación y el contenido del archivo fueron revisados manualmente antes de incorporarlos al repositorio.
+
+### Intervención 7 — Umbral configurable y estrategia de detección de anomalías mediante TDD
+
+Comenzar la funcionalidad de detección de anomalías aplicando TDD estricto y conservar la arquitectura desacoplada utilizada por SensorHub.
+Se decidió que el umbral fuera configurable individualmente por sensor mediante `alert_threshold`. También se decidió que el umbral fuera opcional. Un valor `None` representa que el sensor no tiene configurada una detección basada en umbral. La decisión buscó conservar compatibilidad con los sensores existentes y evitar asignarles artificialmente un valor de alerta.
+
+### Consulta realizada a la IA
+
+Se solicitó avanzar paso a paso desde el comportamiento más pequeño, escribiendo primero pruebas que fallaran antes de modificar la implementación.
+La IA propuso separar el criterio de detección mediante un contrato `AlertStrategy` y una primera implementación `ThresholdAlertStrategy`, de manera que el criterio pueda sustituirse posteriormente sin modificar al consumidor. También propuso incorporar `alert_threshold` al modelo y a los contratos de sensores de forma incremental mediante TDD.
+
+### Primer ciclo TDD — Estrategia de detección
+
+Se escribió primero una prueba para comprobar que una estrategia basada en umbral considerara anómalo un valor superior al límite configurado.
+
+**El estado RED produjo:**
+
+`ModuleNotFoundError: No module named 'app.domain.alert_strategy'`
+
+Después se implementaron:
+
+- `AlertStrategy` mediante `Protocol`
+- `ThresholdAlertStrategy`
+
+La implementación mínima utiliza la regla:
+
+`value > threshold`
+
+**La prueba quedó en GREEN.**
+
+### Segundo ciclo TDD — Creación de sensor con umbral
+
+Se añadió una prueba que intentó crear un sensor con `alert_threshold=30.0`.
+
+**El primer RED produjo:**
+
+`AttributeError: 'Sensor' object has no attribute 'alert_threshold'`
+
+Se incorporó el nuevo atributo al modelo `Sensor` y se comenzó a propagar desde `SensorService`. Durante la implementación se detectó que `SensorCreate` todavía no contenía el nuevo campo. pytest y mypy mostraron que el contrato estaba incompleto.
+
+mypy reportó:
+
+`"SensorCreate" has no attribute "alert_threshold"` y `Unexpected keyword argument "alert_threshold" for "SensorCreate"`
+
+Al corregir el esquema se introdujo accidentalmente una segunda definición de `SensorCreate` dentro de `SensorUpdate`, provocando un `IndentationError`.
+La IA ayudó a localizar la duplicación y se decidió restaurar únicamente `app/schemas/sensor.py` desde el último commit válido para volver a aplicar solamente el cambio necesario. Después de reparar el archivo, la prueba de creación con umbral quedó en GREEN y Ruff y mypy finalizaron correctamente.
+
+### Tercer ciclo TDD — Actualización del umbral
+
+Se añadió una prueba para modificar un sensor existente desde `30.0` hasta `35.0`. 
+
+**El RED confirmó que** `SensorUpdate` ignoraba todavía el nuevo campo:
+
+`assert 30.0 == 35.0`
+
+Se incorporó `alert_threshold` a `SensorUpdate`.
+
+No fue necesario modificar la lógica de `SensorService.update_sensor`, ya que el mecanismo existente basado en `model_dump(exclude_unset=True)` y `setattr` admitió automáticamente el nuevo campo. Se decidió no incluir `alert_threshold` dentro del validador que rechaza valores nulos para otros atributos, porque `None` tiene un significado válido: desactivar el umbral. **La prueba quedó en GREEN.**
+
+### Cuarto ciclo TDD — Contrato HTTP
+
+Se añadió una prueba de integración para crear un sensor mediante `POST /sensors/` con `alert_threshold=30.0` y comprobar que el valor apareciera en la respuesta.
+
+**El estado RED produjo:**
+
+`KeyError: 'alert_threshold'`
+
+La creación y persistencia ya funcionaban, pero `SensorResponse` no exponía todavía el atributo. Se incorporó `alert_threshold: float | None` al esquema de respuesta y **la prueba quedó en GREEN.**
+
+### Validación del esquema persistente
+
+Aunque todas las pruebas pasaban, se decidió comprobar también la base SQLite utilizada por la aplicación. La inspección mostró que el modelo SQLAlchemy ya contenía `alert_threshold`, pero la tabla física `sensors` todavía conservaba únicamente:
+
+`id, code, name, sensor_type, unit, created_at`
+
+Esto confirmó que las pruebas construían correctamente un esquema nuevo desde los metadatos, pero que la base persistente necesitaba una migración.
+
+Se comprobó que existía la migración inicial `eacacdab5dc6`. La base `sensorhub.db` contenía el mismo esquema representado por esa revisión, pero no tenía la tabla `alembic_version`. Antes de modificarla se verificaron:
+
+- columnas de `sensors`
+- índice único `ix_sensors_code`
+- columnas de `readings`
+- clave foránea `readings.sensor_id -> sensors.id`
+- configuración de `target_metadata = Base.metadata`
+
+También se creó una copia de seguridad de la base antes de adoptar el historial. Después de comprobar la equivalencia se ejecutó `alembic stamp eacacdab5dc6`. El `stamp` registró el estado existente sin volver a ejecutar la migración inicial.
+Se utilizó `alembic revision --autogenerate` y Alembic detectó únicamente `Detected added column 'sensors.alert_threshold'`. Se generó la revisión `b89c5db35c12`. La migración candidata fue revisada manualmente antes de aplicarla. Se confirmó que únicamente agregaba una columna nullable `alert_threshold` y que su `downgrade` eliminaba exclusivamente esa columna. Se mantuvo `nullable=True` para preservar la compatibilidad con sensores históricos. Después se aplicó `alembic upgrade head`. La base quedó en `b89c5db35c12 (head)`. La inspección física confirmó la nueva columna y preservó los sensores existentes con `alert_threshold = NULL`.
+
+### Decisión
+
+Mantener un umbral opcional por sensor y encapsular el criterio de detección detrás de `AlertStrategy`.
+La primera estrategia concreta será `ThresholdAlertStrategy`.
+La configuración del umbral forma parte del sensor, mientras que la decisión de considerar anómala una lectura queda separada detrás de una estrategia intercambiable.
+Se decidió además versionar mediante Alembic cualquier modificación persistente del esquema en lugar de depender de `Base.metadata.create_all()` para evolucionar tablas existentes.
+
+### Resultado
+
+La validación final del bloque produjo:
+
+- Ruff sin errores en `app`, `tests` y `migrations`
+- mypy sin errores en 37 archivos
+- 33 pruebas aprobadas
+- cobertura global de 91.95 %
+- Alembic en `b89c5db35c12 (head)`
+- columna `sensors.alert_threshold` presente físicamente
+- sensores históricos preservados con umbral nulo
+- una advertencia existente de `Starlette TestClient` y `httpx`, no relacionada con los cambios realizados

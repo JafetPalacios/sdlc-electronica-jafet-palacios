@@ -62,6 +62,7 @@ class SensorService:
             name=sensor_data.name,
             sensor_type=sensor_data.sensor_type,
             unit=sensor_data.unit,
+            alert_threshold=sensor_data.alert_threshold,
         )
 
         return self._repository.create(sensor)                                                          # Delegamos la inserción y recuperación del estado final al repositorio

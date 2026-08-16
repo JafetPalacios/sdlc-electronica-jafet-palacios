@@ -1,7 +1,7 @@
 import pytest
 
 from app.exceptions import SensorCodeConflictError
-from app.schemas import SensorCreate
+from app.schemas import SensorCreate, SensorUpdate
 from app.services.sensor_service import SensorService
 from tests.fakes.fake_sensor_repository import FakeSensorRepository
 
@@ -105,3 +105,49 @@ def test_list_sensors() -> None:                                        # Verifi
     # Verificamos que el orden y los códigos sean los esperados
     assert sensors[0].code == "TEMP-001"
     assert sensors[1].code == "TEMP-002"
+
+# Creación de sensor con umbral de alerta
+def test_create_sensor_with_alert_threshold() -> None:
+    # Preparamos un repositorio aislado y el servicio bajo prueba
+    repository = FakeSensorRepository()
+    service = SensorService(repository)
+
+    # Solicitamos la creación de un sensor con un umbral de alerta configurable
+    sensor_data = SensorCreate(
+        code="TEMP-ALERT-001",
+        name="Sensor de temperatura con alerta",
+        sensor_type="temperature",
+        unit="°C",
+        alert_threshold=30.0,
+    )
+
+    created_sensor = service.create_sensor(sensor_data)
+
+    # Confirmamos que el umbral forme parte del estado del sensor creado
+    assert created_sensor.alert_threshold == 30.0
+
+# Actualización del umbral de alerta
+def test_update_sensor_alert_threshold() -> None:
+    # Preparamos un sensor existente con un umbral inicial
+    repository = FakeSensorRepository()
+    service = SensorService(repository)
+
+    sensor = service.create_sensor(
+        SensorCreate(
+            code="TEMP-ALERT-002",
+            name="Sensor de temperatura",
+            sensor_type="temperature",
+            unit="°C",
+            alert_threshold=30.0,
+        )
+    )
+
+    # Solicitamos modificar únicamente el umbral configurado
+    updated_sensor = service.update_sensor(
+        sensor.id,
+        SensorUpdate(
+            alert_threshold=35.0,
+        ),
+    )
+
+    assert updated_sensor.alert_threshold == 35.0

@@ -248,3 +248,26 @@ def test_delete_sensor_with_readings_returns_409(
             "porque tiene lecturas asociadas"
         ),
     }
+
+# Umbral de alerta en el contrato público
+def test_create_sensor_with_alert_threshold_returns_threshold(
+    client: TestClient,
+) -> None:
+    # Registramos un sensor con un umbral configurable
+    response = client.post(
+        "/sensors/",
+        json={
+            "code": "TEMP-ALERT-API-001",
+            "name": "Sensor de temperatura con alerta",
+            "sensor_type": "temperature",
+            "unit": "°C",
+            "alert_threshold": 30.0,
+        },
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+
+    response_data = response.json()
+
+    # Confirmamos que el contrato público exponga el umbral persistido
+    assert response_data["alert_threshold"] == 30.0
