@@ -269,3 +269,27 @@ def test_delete_reading_success(client: TestClient) -> None:
     )
 
     assert get_response.status_code == status.HTTP_404_NOT_FOUND
+
+# Verificamos que una combinación de fechas con tratamiento temporal incompatible produzca HTTP 400
+def test_list_readings_with_mixed_timezone_awareness_returns_400(
+    client: TestClient,
+) -> None:
+
+    sensor = create_sensor(client)
+    sensor_id = sensor["id"]
+
+    response = client.get(
+        (
+            f"/sensors/{sensor_id}/readings"
+            "?from=2026-08-10T00:00:00Z"
+            "&to=2026-08-11T00:00:00"
+        ),
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.json() == {
+        "detail": (
+            "Las fechas del rango deben usar de forma consistente "
+            "información de zona horaria"
+        ),
+    }

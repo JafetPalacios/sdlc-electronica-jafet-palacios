@@ -121,6 +121,21 @@ offset >= 0
 
 Los valores inválidos deberán rechazarse explícitamente mediante una excepción de dominio.
 
+### Resultado de implementación
+
+Se implementó `InvalidPaginationError` como excepción de dominio y se incorporó validación defensiva directamente en `ReadingService`. El servicio mantiene ahora explícitamente las invariantes:
+
+- `1 <= limit <= 100`
+- `offset >= 0`
+
+La validación ocurre antes de consultar los repositorios. Se añadieron tres pruebas unitarias independientes para comprobar:
+
+- límite inferior inválido
+- límite superior inválido
+- desplazamiento negativo
+
+Las tres pruebas verifican además que `ReadingRepository.list_for_sensor` no sea invocado cuando la entrada incumple el contrato.
+
 ## Hallazgo 3 — Comparación entre fechas naive y aware
 
 **Severidad propuesta por la IA:** Media
@@ -143,6 +158,15 @@ También se comprobó que los filtros temporales aceptan objetos datetime sin es
 
 Se acepta el hallazgo con severidad media. Se modifica parcialmente el razonamiento de la IA porque el riesgo también puede presentarse a través de la API y no solamente mediante llamadas directas a `ReadingService`. Antes de implementar una corrección se deberá definir una política temporal coherente para SensorHub.
 Se debe crear primero un caso de prueba que reproduzca la combinación de fechas naive y aware. Después de verificar el fallo, implementar una política temporal consistente para los filtros.
+
+### Resultado de implementación
+
+Se reprodujo primero el problema mediante una prueba unitaria que combinó una fecha aware con otra naive. Antes de la corrección, `ReadingService` produjo:
+
+`TypeError: can't compare offset-naive and offset-aware datetimes`
+
+Se creó `InvalidDateTimezoneError` y se modificó `ReadingService` para comprobar, antes de comparar el rango, si ambas fechas utilizan de manera consistente información de zona horaria. La solución no convierte silenciosamente fechas naive a UTC ni inventa una zona horaria. Únicamente rechaza combinaciones incompatibles. También se añadió un manejador de FastAPI que transforma `InvalidDateTimezoneError` en HTTP 400.
+Finalmente se incorporaron pruebas tanto en la capa de servicio como en la frontera HTTP.
 
 ## Hallazgo 4 — Ausencia de regla física para tipos desconocidos
 
@@ -197,3 +221,16 @@ La IA produjo cinco hallazgos iniciales. Después de contrastarlos con el códig
 
 La revisión mostró que un hallazgo generado por IA puede presentar un razonamiento técnicamente plausible y aun así depender de supuestos que no se cumplen en el proyecto.
 Por este motivo, las recomendaciones de una herramienta de IA se trataron como propuestas de revisión y no como decisiones técnicas automáticas.
+
+## Resultado de implementación y pruebas
+
+Los dos hallazgos que requerían cambios funcionales fueron implementados y verificados mediante TDD. Se incorporaron cinco pruebas nuevas:
+
+1. `test_list_readings_rejects_limit_below_minimum`
+2. `test_list_readings_rejects_limit_above_maximum`
+3. `test_list_readings_rejects_negative_offset`
+4. `test_list_readings_rejects_mixed_timezone_awareness`
+5. `test_list_readings_with_mixed_timezone_awareness_returns_400`
+
+La suite completa terminó con 29 pruebas aprobadas y una cobertura global de 91.81 %. Ruff y mypy finalizaron sin errores.
+Los resultados confirmaron que las propuestas generadas por IA necesitaron validación humana antes de su adopción: algunos hallazgos fueron rechazados, otros modificados y únicamente los respaldados por el código y por pruebas reproducibles generaron cambios funcionales.

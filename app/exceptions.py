@@ -61,6 +61,17 @@ class InvalidDateRangeError(SensorHubError):                            # Indica
         )
 
 
+# Indicamos que las fechas del rango utilizan tratamientos incompatibles de zona horaria
+class InvalidDateTimezoneError(SensorHubError):
+
+    def __init__(self) -> None:
+
+        super().__init__(
+            "Las fechas del rango deben usar de forma consistente "
+            "información de zona horaria"
+        )
+
+
 # Indicamos que los parámetros de paginación no respetan las invariantes del servicio
 class InvalidPaginationError(SensorHubError):
 

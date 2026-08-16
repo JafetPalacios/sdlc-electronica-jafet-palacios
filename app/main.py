@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.exceptions import (
     InvalidDateRangeError,
+    InvalidDateTimezoneError,
     InvalidSensorUnitError,
     ReadingNotFoundError,
     ReadingValueOutOfRangeError,
@@ -109,6 +110,23 @@ async def handle_reading_not_found(
 
 
 #==========[     Manejadores de errores de filtros     ]==========
+
+# Convertimos fechas con tratamiento incompatible en una respuesta HTTP 400
+@app.exception_handler(InvalidDateTimezoneError)
+async def handle_invalid_date_timezone(
+    request: Request,
+    exc: InvalidDateTimezoneError,
+) -> JSONResponse:
+
+    _ = request
+
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={
+            "detail": str(exc),
+        },
+    )
+
 
 # Convertimos un rango temporal inválido en una respuesta HTTP 400
 @app.exception_handler(InvalidDateRangeError)

@@ -1,6 +1,8 @@
+from datetime import UTC, datetime
+
 import pytest
 
-from app.exceptions import InvalidPaginationError
+from app.exceptions import InvalidDateTimezoneError, InvalidPaginationError
 from app.models import Sensor
 from app.services.reading_service import ReadingService
 from tests.fakes.fake_reading_repository import FakeReadingRepository
@@ -79,4 +81,37 @@ def test_list_readings_rejects_negative_offset() -> None:
         )
 
     # Confirmamos que detenemos la operación antes de consultar persistencia
+    assert reading_repository.list_for_sensor_calls == 0
+
+
+# Fechas con tratamiento de zona horaria incompatible
+def test_list_readings_rejects_mixed_timezone_awareness() -> None:
+    # Comprobamos que el servicio rechace una combinación temporal ambigua
+    # antes de intentar comparar o delegar las fechas al repositorio
+    service, reading_repository = create_service_with_sensor()
+
+    start_date = datetime(
+        2026,
+        8,
+        10,
+        10,
+        0,
+        tzinfo=UTC,
+    )
+    end_date = datetime(
+        2026,
+        8,
+        11,
+        10,
+        0,
+    )
+
+    with pytest.raises(InvalidDateTimezoneError):
+        service.list_readings_for_sensor(
+            sensor_id=1,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    # Verificamos que las fechas incompatibles no alcancen persistencia
     assert reading_repository.list_for_sensor_calls == 0

@@ -3,6 +3,7 @@ from datetime import datetime
 from app.domain.sensor_rules import SENSOR_RULES
 from app.exceptions import (
     InvalidDateRangeError,
+    InvalidDateTimezoneError,
     InvalidPaginationError,
     ReadingNotFoundError,
     ReadingValueOutOfRangeError,
@@ -101,12 +102,17 @@ class ReadingService:
         if limit < 1 or limit > 100 or offset < 0:
             raise InvalidPaginationError()
 
-        if (
-            start_date is not None                                              # Validamos la coherencia del rango antes de consultar la base de datos
-            and end_date is not None                                            # La fecha inicial puede ser igual a la final pero no posterior
-            and start_date > end_date
-        ):
-            raise InvalidDateRangeError()
+        if start_date is not None and end_date is not None:
+            # Comprobamos que ambas fechas utilicen el mismo tratamiento de zona horaria
+            start_is_aware = start_date.utcoffset() is not None
+            end_is_aware = end_date.utcoffset() is not None
+
+            if start_is_aware != end_is_aware:
+                raise InvalidDateTimezoneError()
+
+            # Validamos la coherencia del rango después de descartar combinaciones incompatibles
+            if start_date > end_date:
+                raise InvalidDateRangeError()
 
         sensor = self._sensor_repository.get_by_id(sensor_id)                   # Comprobamos que el sensor solicitado exista aunque no tenga lecturas
 

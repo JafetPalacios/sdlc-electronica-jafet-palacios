@@ -145,3 +145,49 @@ Durante la implementación, mypy detectó accidentalmente que se había eliminad
 * La suite completa terminó con 27 pruebas aprobadas.
 * La cobertura global fue de 91.75 %
 * No se detectaron regresiones en los casos existentes.
+
+
+### Intervención 5 — Generación de casos borde y corrección temporal mediante TDD
+
+Continuar utilizando los hallazgos previamente auditados para generar nuevas pruebas antes de modificar el código. Se decidió utilizar la IA como fuente de propuestas de casos borde, pero revisar cada propuesta antes de incorporarla. También se decidió no convertir automáticamente una fecha naive a UTC, porque hacerlo implicaría asumir información temporal que el cliente no proporcionó.
+
+### Consulta realizada a la IA
+
+Se solicitó proponer exactamente cinco casos adicionales para `ReadingService`, priorizando casos borde, invariantes de negocio, comportamiento directo del servicio y errores que pudieran quedar ocultos por las validaciones del router. La IA propuso casos relacionados con:
+
+- paginación inválida
+- combinación de fechas naive y aware
+- actualización de una lectura cuyo sensor propietario no existe
+- sensores históricos sin regla física registrada
+- eliminación de una lectura inexistente
+
+### Análisis de las propuestas de la IA
+
+La propuesta de paginación fue modificada para separar tres invariantes diferentes en pruebas independientes. La propuesta temporal también fue modificada. La IA sugirió inicialmente una prueba que esperara el `TypeError` actual, pero se decidió no convertir un error accidental en el comportamiento esperado del sistema. En su lugar se definió como comportamiento deseado una excepción explícita de dominio: `InvalidDateTimezoneError`.
+También se detectó que la IA hizo referencia incorrecta a la numeración de algunos hallazgos del code review, por lo que esa información se corrigió durante la revisión humana.
+
+### Ciclo TDD temporal verificado
+
+El primer estado rojo ocurrió porque `InvalidDateTimezoneError` todavía no existía. Después de crear únicamente la excepción, la prueba pudo ejecutarse y reprodujo el defecto real:
+
+`TypeError: can't compare offset-naive and offset-aware datetimes`
+
+Posteriormente se añadió una validación en `ReadingService` que comprueba si `start_date` y `end_date` utilizan de manera consistente información de zona horaria antes de compararlas. La prueba unitaria quedó entonces verde.
+Se añadió además una prueba de integración para comprobar el mismo caso a través de la API. Esta prueba volvió a quedar roja porque la nueva excepción de dominio escapaba de FastAPI al no existir todavía un manejador HTTP.
+Finalmente se registró un manejador de `InvalidDateTimezoneError` que transforma la excepción en HTTP 400 y la prueba de integración quedó verde.
+
+### Decisión
+
+Se decidió rechazar únicamente la mezcla de fechas naive y aware. No se realizó ninguna conversión automática de fechas naive a UTC y no se impuso todavía que todo SensorHub utilice exclusivamente UTC, ya que esas decisiones requerirían una política temporal más amplia. La corrección quedó limitada al defecto demostrado durante el code review. Se incorporaron cinco pruebas nuevas:
+
+- tres pruebas unitarias de invariantes de paginación
+- una prueba unitaria de incompatibilidad temporal
+- una prueba de integración de incompatibilidad temporal
+
+Las pruebas nuevas finalizaron correctamente.
+* Ruff terminó sin errores.
+* mypy terminó sin problemas en 35 archivos.
+* La suite completa terminó con 29 pruebas aprobadas.
+* La cobertura global fue de 91.81 %, superior al mínimo requerido de 80 %.
+
+Se mantuvo una advertencia de deprecación proveniente de `Starlette TestClient` y `httpx`, no relacionada con los cambios realizados durante esta actividad.
