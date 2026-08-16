@@ -3,6 +3,7 @@ from datetime import datetime
 from app.domain.sensor_rules import SENSOR_RULES
 from app.exceptions import (
     InvalidDateRangeError,
+    InvalidPaginationError,
     ReadingNotFoundError,
     ReadingValueOutOfRangeError,
     SensorNotFoundError,
@@ -95,6 +96,10 @@ class ReadingService:
         offset: int = 0,
     ) -> list[Reading]:
 
+        # Protegemos las invariantes de paginación también cuando el servicio
+        # se utiliza directamente sin pasar por las validaciones de FastAPI
+        if limit < 1 or limit > 100 or offset < 0:
+            raise InvalidPaginationError()
 
         if (
             start_date is not None                                              # Validamos la coherencia del rango antes de consultar la base de datos

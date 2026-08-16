@@ -99,3 +99,49 @@ La configuración inicial también requirió instalar herramientas adicionales, 
 
 En comparación, Copilot ofrece una interacción más inmediata dentro del editor para sugerencias y consultas pequeñas, mientras que Aider proporciona una integración más fuerte con el repositorio y una trazabilidad Git más visible.
 Se consideró válido el cambio producido por Aider después de revisar manualmente su implementación y verificarlo mediante Ruff, mypy, pruebas funcionales y la suite completa. Aider resulta especialmente útil cuando se busca que una modificación asistida por IA quede directamente relacionada con el historial del repositorio, pero su automatización de Git debe revisarse cuidadosamente para evitar commits innecesarios o cambios que no hayan sido evaluados por el desarrollador.
+
+### Intervención 4 — Code review asistido y validación de paginación en ReadingService
+
+La actividad consistió en realizar un code review asistido por IA sobre `ReadingService` y evaluar manualmente cada hallazgo antes de modificar el código. Se decidió no aceptar automáticamente las recomendaciones generadas. Cada hallazgo se contrastó con los esquemas, modelos, repositorios, reglas de dominio y excepciones existentes en SensorHub. También se decidió implementar las correcciones aceptadas utilizando un ciclo TDD, comenzando por pruebas que demostraran el comportamiento faltante antes de modificar la implementación.
+
+### Consulta realizada a la IA
+
+Se solicitó revisar `ReadingService` buscando riesgos relacionados con SOLID, mantenibilidad, casos borde, lógica, integridad de datos, seguridad, rendimiento y comportamiento del servicio fuera de FastAPI. Posteriormente se solicitó proponer exactamente cinco casos de prueba adicionales que no duplicaran la cobertura existente.
+
+La IA produjo cinco hallazgos durante el code review. Después de verificarlos contra el código real:
+
+- un hallazgo fue aceptado
+- dos fueron modificados después de precisar su alcance o severidad
+- dos fueron rechazados
+
+Uno de los hallazgos modificados detectó que `ReadingService.list_readings_for_sensor` dependía de las restricciones de paginación del router y no protegía directamente las invariantes `1 <= limit <= 100` y `offset >= 0`. La IA también propuso cinco casos borde adicionales. La propuesta de paginación fue modificada para separar las tres invariantes en pruebas independientes.
+
+### Decisión
+
+Se decidió incorporar validación defensiva de paginación dentro de `ReadingService` para que sus reglas se mantengan incluso cuando el servicio sea utilizado directamente sin pasar por FastAPI. Se rechazó corregir silenciosamente límites excesivos y se mantuvieron las mismas reglas que utiliza actualmente la API:
+
+- `1 <= limit <= 100`
+- `offset >= 0`
+
+Se creó `InvalidPaginationError` como excepción específica de dominio. También se creó `FakeReadingRepository` para permitir pruebas unitarias del servicio sin depender de SQLAlchemy o una base de datos.
+
+### Ciclo TDD verificado
+
+El primer estado rojo ocurrió porque `InvalidPaginationError` todavía no existía y pytest no pudo importar la excepción.
+Después de definir únicamente el contrato de la excepción, las tres pruebas llegaron a ejecutarse pero fallaron porque `ReadingService` todavía no lanzaba `InvalidPaginationError`.
+Finalmente se incorporó la validación mínima en `list_readings_for_sensor` y las tres pruebas quedaron verdes:
+
+- `test_list_readings_rejects_limit_below_minimum`
+- `test_list_readings_rejects_limit_above_maximum`
+- `test_list_readings_rejects_negative_offset`
+
+Durante la implementación, mypy detectó accidentalmente que se había eliminado parte del flujo original de `list_readings_for_sensor`. El error `Missing return statement` permitió identificar que faltaban la comprobación del sensor y la delegación final al repositorio. Se restauró el comportamiento original y se conservó únicamente la nueva validación.
+
+### Resultado
+
+* Ruff terminó correctamente sobre `app` y `tests`.
+* mypy terminó sin problemas en 35 archivos.
+* Las tres nuevas pruebas unitarias fueron aprobadas.
+* La suite completa terminó con 27 pruebas aprobadas.
+* La cobertura global fue de 91.75 %
+* No se detectaron regresiones en los casos existentes.

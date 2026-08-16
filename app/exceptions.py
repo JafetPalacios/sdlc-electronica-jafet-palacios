@@ -61,6 +61,17 @@ class InvalidDateRangeError(SensorHubError):                            # Indica
         )
 
 
+# Indicamos que los parámetros de paginación no respetan las invariantes del servicio
+class InvalidPaginationError(SensorHubError):
+
+    def __init__(self) -> None:
+
+        super().__init__(
+            "La paginación debe usar un límite entre 1 y 100 "
+            "y un desplazamiento mayor o igual a 0"
+        )
+
+
 # Excepciones relacionadas con reglas físicas
 # Representamos los errores producidos por tipos, unidades y valores incompatibles con el catálogo de SensorHub
 class UnsupportedSensorTypeError(SensorHubError):                       # Indicamos que el tipo de sensor no está admitido por SensorHub
