@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.exceptions import (
     InvalidDateRangeError,
+    InvalidDateTimezoneError,
     InvalidSensorUnitError,
     ReadingNotFoundError,
     ReadingValueOutOfRangeError,
@@ -13,6 +14,7 @@ from app.exceptions import (
     SensorNotFoundError,
     UnsupportedSensorTypeError,
 )
+from app.routers.alerts import router as alerts_router
 from app.routers.readings import router as readings_router
 from app.routers.sensors import router as sensors_router
 
@@ -33,7 +35,7 @@ app = FastAPI(                                                          # Creaci
 # Cada router conserva sus propias rutas, etiquetas y contratos de respuesta
 app.include_router(sensors_router)
 app.include_router(readings_router)
-
+app.include_router(alerts_router)
 
 # ==========[     Manejadores de errores de sensores     ]==========
 
@@ -109,6 +111,23 @@ async def handle_reading_not_found(
 
 
 #==========[     Manejadores de errores de filtros     ]==========
+
+# Convertimos fechas con tratamiento incompatible en una respuesta HTTP 400
+@app.exception_handler(InvalidDateTimezoneError)
+async def handle_invalid_date_timezone(
+    request: Request,
+    exc: InvalidDateTimezoneError,
+) -> JSONResponse:
+
+    _ = request
+
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={
+            "detail": str(exc),
+        },
+    )
+
 
 # Convertimos un rango temporal inválido en una respuesta HTTP 400
 @app.exception_handler(InvalidDateRangeError)

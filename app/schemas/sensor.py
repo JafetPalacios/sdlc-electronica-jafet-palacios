@@ -36,6 +36,13 @@ class SensorCreate(BaseModel):
         examples=["C"],
     )
 
+    # Umbral opcional utilizado por la estrategia de detecci?n de anomal?as
+    alert_threshold: float | None = Field(
+        default=None,
+        description="Umbral superior configurable para generar alertas",
+        examples=[30.0],
+    )
+
 # Representamos los campos permitidos al actualizar un sensor
 class SensorUpdate(BaseModel):
 
@@ -71,6 +78,13 @@ class SensorUpdate(BaseModel):
         examples=["°C"],
     )
 
+        # Umbral opcional utilizado para modificar o desactivar la detección de anomalías
+    alert_threshold: float | None = Field(
+        default=None,
+        description="Umbral superior configurable para generar alertas",
+        examples=[35.0],
+    )
+
     @field_validator(
         "code",
         "name",
@@ -103,4 +117,8 @@ class SensorResponse(BaseModel):                                # Representamos 
     name: str                                                   # Nombre descriptivo utilizado para reconocer el sensor
     sensor_type: str                                            # Categoría o magnitud física asociada al sensor
     unit: str                                                   # Unidad utilizada para interpretar sus lecturas
+
+        # Umbral superior configurado para detectar anomalías en las lecturas
+    alert_threshold: float | None
+
     created_at: datetime                                        # Fecha y hora generadas cuando registramos el sensor

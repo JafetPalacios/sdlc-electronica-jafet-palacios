@@ -4,12 +4,17 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.domain.alert_strategy import ThresholdAlertStrategy
+from app.repositories.sqlalchemy_alert_repository import (
+    SqlAlchemyAlertRepository,
+)
 from app.repositories.sqlalchemy_reading_repository import (
     SqlAlchemyReadingRepository,
 )
 from app.repositories.sqlalchemy_sensor_repository import (
     SqlAlchemySensorRepository,
 )
+from app.services.alert_service import AlertService
 from app.services.reading_service import ReadingService
 from app.services.sensor_service import SensorService
 
@@ -21,18 +26,40 @@ DatabaseSession = Annotated[
     Depends(get_db),
 ]
 
+# Construcción del servicio de alertas
+def get_alert_service(
+    db: DatabaseSession,
+) -> AlertService:
+
+    # Construimos los repositorios concretos que participan en la consulta
+    alert_repository = SqlAlchemyAlertRepository(db)
+    sensor_repository = SqlAlchemySensorRepository(db)
+
+    # Inyectamos las abstracciones requeridas por el servicio de aplicación
+    return AlertService(
+        alert_repository=alert_repository,
+        sensor_repository=sensor_repository,
+    )
+
 
 # Construcción del servicio de lecturas
-def get_reading_service(                                                # Creamos los repositorios concretos que ReadingService necesita
-    db: DatabaseSession,                                                # Utilizamos la misma sesión durante toda la petición para mantener
-) -> ReadingService:                                                    # una única unidad de trabajo entre las operaciones relacionadas
+def get_reading_service(
+    db: DatabaseSession,
+) -> ReadingService:
 
-    reading_repository = SqlAlchemyReadingRepository(db)                # Creamos el repositorio responsable de consultar y persistir lecturas
-    sensor_repository = SqlAlchemySensorRepository(db)                  # Creamos el repositorio utilizado para comprobar sensores propietarios
+    # Construimos los repositorios concretos utilizando la misma sesión
+    reading_repository = SqlAlchemyReadingRepository(db)
+    sensor_repository = SqlAlchemySensorRepository(db)
+    alert_repository = SqlAlchemyAlertRepository(db)
 
-    return ReadingService(                                              # Inyectamos ambos repositorios mediante los contratos esperados
-        reading_repository=reading_repository,                          # El servicio queda desacoplado de la creación concreta de dependencias
+    # Seleccionamos la estrategia concreta desde el punto de composición
+    alert_strategy = ThresholdAlertStrategy()
+
+    return ReadingService(
+        reading_repository=reading_repository,
         sensor_repository=sensor_repository,
+        alert_repository=alert_repository,
+        alert_strategy=alert_strategy,
     )
 
 

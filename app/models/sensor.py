@@ -60,3 +60,8 @@ class Sensor(Base):
     readings: Mapped[list[Reading]] = relationship(         # Permitimos acceder a todas las lecturas mediante sensor.readings
         back_populates="sensor",                            # Mantiene sincronizada la relación inversa reading.sensor
     )
+
+    # Umbral opcional para detección de anomalías
+    alert_threshold: Mapped[float | None] = mapped_column(
+        nullable=True,
+    )

@@ -2,6 +2,10 @@ from typing import cast
 
 from fastapi import status
 from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models import Alert
 
 
 # Pruebas de integración para lecturas
@@ -269,3 +273,76 @@ def test_delete_reading_success(client: TestClient) -> None:
     )
 
     assert get_response.status_code == status.HTTP_404_NOT_FOUND
+
+# Verificamos que una combinación de fechas con tratamiento temporal incompatible produzca HTTP 400
+def test_list_readings_with_mixed_timezone_awareness_returns_400(
+    client: TestClient,
+) -> None:
+
+    sensor = create_sensor(client)
+    sensor_id = sensor["id"]
+
+    response = client.get(
+        (
+            f"/sensors/{sensor_id}/readings"
+            "?from=2026-08-10T00:00:00Z"
+            "&to=2026-08-11T00:00:00"
+        ),
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.json() == {
+        "detail": (
+            "Las fechas del rango deben usar de forma consistente "
+            "información de zona horaria"
+        ),
+    }
+
+# Generación persistente de alerta desde el flujo HTTP de lecturas
+def test_create_reading_above_threshold_persists_alert(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    # Registramos un sensor con un umbral activo
+    sensor_response = client.post(
+        "/sensors/",
+        json={
+            "code": "TEMP-ALERT-READING-001",
+            "name": "Sensor de temperatura con alerta",
+            "sensor_type": "temperature",
+            "unit": "°C",
+            "alert_threshold": 30.0,
+        },
+    )
+
+    assert sensor_response.status_code == status.HTTP_201_CREATED
+
+    sensor_id = sensor_response.json()["id"]
+
+    # Registramos una lectura que supera el umbral configurado
+    reading_response = client.post(
+        f"/sensors/{sensor_id}/readings",
+        json={
+            "value": 31.0,
+        },
+    )
+
+    assert reading_response.status_code == status.HTTP_201_CREATED
+
+    reading_id = reading_response.json()["id"]
+
+    # Consultamos directamente la persistencia para comprobar la integración
+    alerts = list(
+        db_session.scalars(
+            select(Alert),
+        ).all()
+    )
+
+    assert len(alerts) == 1
+
+    alert = alerts[0]
+
+    assert alert.sensor_id == sensor_id
+    assert alert.reading_id == reading_id
+    assert alert.value == 31.0
+    assert alert.threshold == 30.0

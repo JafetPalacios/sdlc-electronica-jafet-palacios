@@ -158,8 +158,8 @@ jobs:
           # Comprobamos que las tablas principales fueron creadas por las migraciones
           tables = set(inspect(engine).get_table_names())
 
-          assert revision == "eacacdab5dc6"
-          assert {"alembic_version", "sensors", "readings"} <= tables
+          assert revision == "ccdeecc8c528"
+          assert {"alembic_version", "sensors", "readings", "alerts"} <= tables
 
           # Ejecutamos un flujo funcional real contra PostgreSQL
           with TestClient(app) as client:

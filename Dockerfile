@@ -26,6 +26,12 @@ FROM python:3.12-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+# Actualizamos los paquetes del sistema para incorporar correcciones de seguridad
+# Eliminamos los índices de APT para no conservar archivos innecesarios
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copiamos solamente las dependencias instaladas durante la etapa de construcción
