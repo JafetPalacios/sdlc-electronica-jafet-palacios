@@ -69,3 +69,5 @@ Se formaliza y mantiene la arquitectura en capas:
 - Las funcionalidades pequeñas implican mayor ceremonia
 - Los contratos de repositorio y sus implementaciones deben mantenerse alineados
 - Se acepta una mayor complejidad estructural inicial a cambio de conservar la separación de responsabilidades
+
+- **Atomicidad entre operaciones coordinadas:** actualmente cada repositorio controla su propia transacción mediante operaciones como `commit()` y `refresh()`. Esto simplifica las operaciones individuales, pero impide que acciones que involucren varios repositorios, como persistir una lectura y la alerta generada a partir de ella, formen una única transacción atómica. Si en el futuro se requiere garantizar que ambas operaciones se confirmen o reviertan juntas, será necesario introducir una frontera transaccional compartida, por ejemplo mediante un patrón Unit of Work o una abstracción equivalente. No se incorpora actualmente porque ese requisito de atomicidad no forma parte del alcance vigente de SensorHub
