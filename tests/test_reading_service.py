@@ -41,6 +41,16 @@ def create_service_with_sensor() -> tuple[
 
     return service, reading_repository
 
+def test_validate_reading_value_skips_unknown_sensor_type() -> None:
+    # Reutilizamos el helper existente para obtener un ReadingService aislado
+    service, _ = create_service_with_sensor()
+
+    # Verificamos que un tipo histórico sin regla asociada no sea rechazado
+    service._validate_reading_value(
+        sensor_type="legacy_sensor",
+        value=999999.0,
+    )
+
 
 # Límite inferior de paginación
 def test_list_readings_rejects_limit_below_minimum() -> None:
