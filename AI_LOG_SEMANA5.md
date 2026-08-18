@@ -670,3 +670,850 @@ Las consultas de esta intervención se realizaron de forma iterativa a partir de
 | Solicité la validación de los casos de frontera | Propuso comprobar igualdad con el umbral, sensor existente sin alertas y sensor inexistente | Se añadieron las pruebas, pero no se registraron como ciclos RED porque la implementación ya satisfacía esos comportamientos | Distinguir pruebas de regresión de ciclos RED reales mantiene una bitácora fiel al proceso realizado |
 | Solicité cómo incorporar la nueva tabla `alerts` a la base persistente | Propuso registrar `Alert` en Alembic, utilizar `--autogenerate`, revisar la migración antes de aplicarla y respaldar la base | Se aceptó el procedimiento y no se aplicó la migración hasta comprobar que Alembic detectara únicamente `Added table 'alerts'` | Evita aplicar automáticamente cambios inesperados al esquema existente |
 | Solicité una verificación final de la migración | Propuso comprobar físicamente tablas, columnas y claves foráneas y verificar `downgrade` seguido de un nuevo `upgrade` | Se aceptó probar la reversibilidad después de comprobar que la tabla `alerts` contenía cero registros y que existía un respaldo previo | Permite comprobar ambos sentidos de la migración sin poner en riesgo información almacenada |
+
+## Intervención 9 — Revisión por pares: comparación entre revisión humana e IA
+
+Realicé una revisión por pares sobre el repositorio de mi compañera Nadia Barradas Solis
+
+- Repositorio revisado: `sdlc-electronica-nadia`
+- Rama revisada: `main`
+- Commit revisado: `6915164`
+- Objetivo: aplicar primero la checklist de revisión por pares de forma humana y posteriormente comparar los resultados con una revisión independiente realizada por IA
+
+Se decidió realizar primero toda la revisión humana sin consultar a una IA sobre el código, con el objetivo de evitar que sus observaciones influyeran en los hallazgos humanos.
+
+### Revisión humana
+
+Realicé la revisión en un clon independiente del repositorio para no modificar mi propio trabajo ni intervenir sobre el código de mi compañera como se solicitaba. También ejecuté el proyecto y sus pruebas en un entorno virtual independiente antes de emitir observaciones, en lugar de limitar la revisión a leer archivos o diffs.
+
+Durante la revisión humana se analizaron los diez puntos de la checklist:
+
+1. reproducibilidad e instrucciones del proyecto
+2. estructura oficial del repositorio
+3. separación de responsabilidades entre capas
+4. rutas, verbos y códigos HTTP
+5. paginación y filtros
+6. contratos Pydantic y validaciones físicas
+7. manejo de errores HTTP
+8. uso de SQLAlchemy 2.x y repositorios
+9. inversión de dependencias y ciclo de vida de sesiones
+10. pruebas, cobertura, Ruff, mypy y limpieza del repositorio
+
+Para comprobar la reproducibilidad del proyecto se creó un entorno virtual limpio con Python 3.12. Al seguir literalmente la instrucción de instalación indicada en `README.md`, que únicamente instalaba:
+
+`pytest mypy ruff`
+
+la API no pudo ejecutarse porque faltaban dependencias como FastAPI y Uvicorn. Posteriormente se instalaron correctamente las dependencias mediante:
+
+`python -m pip install -r requirements.txt`
+
+Con el entorno correctamente preparado se verificó:
+
+* 92 passed
+* Total coverage: 91.38 %
+* mypy app: Success: no issues found in 21 source files
+
+Ruff reportó cuatro errores E501 relacionados con líneas mayores al límite de 100 caracteres en los archivos de repositorios de alertas. También se verificó que no existieran archivos `.db`, `.sqlite`, `.pyc`, `__pycache__`, `.env` o secretos versionados.
+
+### Principales hallazgos
+
+1. **README desactualizado para ejecutar SensorHub**
+Las instrucciones de instalación solo instalan pytest, mypy y ruff, por lo que en un entorno virtual limpio faltan las dependencias necesarias para ejecutar SensorHub; al seguirlas se obtuvieron errores por ausencia de fastapi y uvicorn. Propongo indicar `python -m pip install -r requirements.txt` y documentar el comando para levantar `app.main:app` localmente.
+
+2. **Los modelos ORM están definidos dentro de db.py**
+Los modelos ORM `SensorModel`, `ReadingModel` y `AlertModel` están definidos dentro de `db.py`, por lo que no existe la capa `app/models/` indicada por la estructura del proyecto. Propongo mover las entidades persistentes a un paquete `app/models/` y dejar `db.py` concentrado en configuración del motor, sesión y base declarativa. También faltaban archivos __init__.py en:
+
+* `app/routers/`
+* `app/services/`
+* `app/schemas/`
+
+3. **El router de alertas accede directamente al repositorio**
+El router de alertas depende directamente de `AlertRepository` y ejecuta `list_for_sensor`, saltándose la capa de servicios. Propongo introducir un `AlertService` que encapsule ese caso de uso y hacer que el router dependa únicamente de dicho servicio.
+
+4. **Orden no totalmente determinista en la paginación**
+La paginación ordena únicamente por `created_at`, por lo que dos lecturas con la misma marca temporal no tienen un criterio explícito que estabilice su posición entre páginas. Propongo añadir un segundo criterio determinista, por ejemplo `ReadingModel.id`, al `order_by`. La paginación normal se verificó funcionalmente:
+
+* PAGINA 1: [(1, 20.0), (2, 21.0)]
+* PAGINA 2: [(3, 22.0), (4, 23.0)]
+* PAGINA 3: [(5, 24.0)]
+
+Los filtros `from` y `to` también funcionaron correctamente y un `limit=201` fue rechazado con `422`.
+
+5. **Diferencia en el manejo de JSON malformado**
+Una petición con JSON sintácticamente inválido devolvió:
+
+```text
+422
+type: json_invalid
+```
+
+mientras que la checklist utilizada para la revisión establece `400` para una petición malformada.
+
+6. **Ruff no estaba completamente verde**
+La ejecución:
+
+`ruff check .`
+
+reportó cuatro errores `E501` en:
+
+`app/repositories/alert_repository.py`
+`app/repositories/sqlalchemy_alert_repository.py`
+
+aunque se puede deber a detalles sin importancia (yo tambien tengo varios errores jeje)
+
+### Aspectos que funcionaron correctamente
+
+Durante la revisión también se verificó que:
+
+* los 92 tests existentes pasaban
+* la cobertura de app era 91.38 %
+* mypy no reportaba errores
+* los endpoints REST principales utilizaban verbos y códigos HTTP adecuados
+* POST /sensors/{sensor_id}/readings devolvía 201
+* DELETE /readings/{reading_id} devolvía 204
+* la paginación mediante limit y offset funcionaba
+* los filtros from y to funcionaban
+* limit=201 era rechazado con 422
+* una temperatura de -300 °C era rechazada con 422
+* una humedad de 150 % era rechazada con 422
+* las unidades K y kelvins eran rechazadas para sensores de temperatura
+* una humedad válida de 50 % era aceptada
+* los repositorios utilizaban Protocol
+* los servicios de sensores y lecturas dependían de abstracciones
+* get_db() utilizaba yield y cerraba la sesión en finally
+* los servicios podían probarse con repositorios falsos sin utilizar una base de datos real
+* se utilizaban Mapped, mapped_column y select() de SQLAlchemy 2.x
+* no se encontraron usos de session.query() ni Column() de la API antigua
+* no había bases de datos ni secretos versionados
+
+### Sugerencias de cambios
+Mi veredicto final es que sugiero cambios porque l flujo de alertas introduce una dependencia directa `router -> repository` mientras que la arquitectura utilizada por los demás flujos mantiene `router -> service -> repository`
+El veredicto no se basó en que la aplicación estuviera completamente rota, ya que las pruebas, cobertura y gran parte de los contratos funcionaron correctamente, sino en incumplimientos concretos de la arquitectura y de las verificaciones solicitadas.
+
+### Revisión por IA
+
+Se implementó con la herramienta de Copilot CLI trabajando sobre el repositorio completo, con Python 3.12, terminal, tests, Ruff, mypy y pruebas HTTP reales. La salida completa confirma además que Copilot dejó el repositorio limpio y trabajó con artefactos temporales fuera del clon. El prompt que utilicé para pedirle la revición fué el siguiente:
+
+Realiza una revisión por pares completa del repositorio en el que estás trabajando actualmente.
+
+CONTEXTO
+Repositorio:
+sdlc-electronica-nadia
+Rama:
+main
+Commit que debe revisarse:
+69151640b28853ec5c2aecfd48ae91888f98e32c
+
+* No modifiques ningún archivo versionado.
+* No hagas commits.
+* No hagas push.
+* No corrijas automáticamente ningún problema.
+
+Puedes leer todo el repositorio y ejecutar comandos de terminal necesarios para comprobar objetivamente su comportamiento.
+
+IMPORTANTE SOBRE EL ENTORNO
+Primero verifica:
+
+* git status --short
+* git branch --show-current
+* git rev-parse HEAD
+* py -0p
+
+Si Python 3.12 está disponible, utiliza Python 3.12 para la revisión.
+
+Para no modificar el repositorio, si necesitas un entorno virtual créalo FUERA del repositorio, por ejemplo dentro de la carpeta temporal del sistema.
+No utilices un entorno Python global contaminado para determinar si las instrucciones de instalación son reproducibles.
+
+METODOLOGÍA
+No hagas únicamente una revisión estática.
+Debes:
+
+1. inspeccionar la raíz completa del repositorio
+2. leer README.md
+3. revisar requirements.txt
+4. revisar pyproject.toml
+5. revisar app/
+6. revisar tests/
+7. revisar migrations/
+8. revisar .github/ cuando sea relevante
+9. inspeccionar los archivos versionados mediante Git
+10. ejecutar realmente las verificaciones necesarias
+
+Antes de instalar las dependencias reales del proyecto, comprueba también si las instrucciones de instalación del README permiten preparar SensorHub en un entorno limpio.
+Después prepara correctamente el entorno según los archivos de dependencias del repositorio y continúa la revisión.
+
+CHECKLIST OFICIAL
+Evalúa individualmente los siguientes 10 puntos.
+
+PUNTO 1 — El PR/proyecto se entiende y se puede probar sin preguntar
+
+Comprueba:
+- que las instrucciones expliquen qué se debe instalar
+- comandos exactos para ejecutar el proyecto
+- comandos para ejecutar pruebas
+- ejemplo de endpoint o JSON
+- que Swagger /docs sea accesible
+- que las instrucciones correspondan al estado actual del proyecto
+
+Si no existe información de un PR concreto, indícalo como no verificable y no como defecto del código.
+
+PUNTO 2 — Se respeta la estructura oficial
+La estructura esperada en la raíz de app es:
+
+app/
+  routers/
+  services/
+  repositories/
+  models/
+  schemas/
+  db.py
+
+Comprueba además:
+- que las carpetas históricas semana X no sean importadas desde app/
+- que los paquetes tengan __init__.py
+- que eliminar conceptualmente las carpetas históricas no rompa la API
+
+PUNTO 3 — Cada capa hace solo lo suyo
+
+Comprueba:
+
+router:
+- responsabilidades HTTP
+- rutas
+- parámetros
+- Depends
+- HTTPException
+- response_model
+
+service:
+- reglas de negocio
+- coordinación de operaciones
+- no debe depender directamente de FastAPI ni ejecutar SQLAlchemy
+
+repository:
+- persistencia
+- consultas
+- interacción con SQLAlchemy
+
+models:
+- entidades persistentes
+
+Busca especialmente:
+- queries dentro de routers
+- reglas de negocio dentro de routers
+- SQLAlchemy dentro de services
+- routers accediendo directamente a repositories
+- routers accediendo a atributos internos como _repo
+
+PUNTO 4 — Verbos, rutas y códigos HTTP
+Comprueba realmente que existan y funcionen:
+
+- GET /sensors/{id}/readings -> 200
+- POST /sensors/{id}/readings -> 201
+- GET /readings/{id} -> 200
+- PATCH /readings/{id} -> 200
+- DELETE /readings/{id} -> 204
+
+Comprueba también:
+- uso correcto de PATCH frente a PUT
+- ausencia de verbos innecesarios dentro de las rutas
+- OpenAPI generado realmente por la aplicación
+
+PUNTO 5 — Paginación y filtros
+Comprueba:
+
+GET /sensors/{id}/readings
+
+con:
+- limit
+- offset
+- from
+- to
+
+Realiza una prueba real con varias lecturas y al menos:
+
+- limit=2&offset=0
+- limit=2&offset=2
+- limit=2&offset=4
+
+Comprueba que no se repitan ni se salten elementos.
+
+Comprueba:
+- límite máximo permitido
+- dónde se aplican limit y offset
+- orden utilizado por la consulta
+- si el orden sigue siendo determinista cuando dos filas tienen el mismo timestamp
+
+PUNTO 6 — Pydantic valida entrada y salida con reglas físicas
+Comprueba:
+- esquemas separados de entrada y salida
+- response_model
+- unidades válidas
+- valores físicamente inválidos
+
+Prueba realmente, como mínimo:
+
+* temperatura -300 C
+* temperatura con unidad "kelvins"
+* temperatura con unidad "K"
+* humedad 150 %
+* humedad 50 %
+
+Comprueba dónde se realiza cada validación y diferencia validación Pydantic de reglas de negocio.
+
+PUNTO 7 — Manejo de errores
+Comprueba respuestas para:
+
+- recurso inexistente
+- conflicto
+- contrato inválido
+- identificador con tipo incorrecto
+- body incompleto
+- JSON sintácticamente malformado
+
+La checklist utiliza como referencia:
+
+- 400 -> petición malformada
+- 404 -> recurso inexistente
+- 409 -> conflicto
+- 422 -> contrato inválido
+
+Comprueba además que:
+- ValueError no escape como 500
+- no haya except pass
+- no se devuelva 200 para recursos inexistentes
+- los mensajes no expongan información sensible
+
+PUNTO 8 — SQLAlchemy 2.x y patrón repositorio
+Comprueba:
+- Mapped[...]
+- mapped_column
+- select()
+- ausencia de session.query()
+- ausencia de Column() de estilo antiguo
+- índices donde corresponde, especialmente sensor_id
+- fechas conscientes de zona horaria, por ejemplo datetime.now(UTC) o equivalente
+- ausencia de bases .db versionadas
+
+PUNTO 9 — DIP y cierre de sesiones
+Comprueba:
+- Repository definidos mediante Protocol u otra abstracción
+- services dependiendo de abstracciones
+- get_db usando yield
+- cierre de sesión mediante finally
+- routers utilizando métodos públicos del service
+- ausencia de acceso directo router -> repository cuando la arquitectura exige service
+- posibilidad de probar los services mediante repositorios falsos sin base de datos real
+
+PUNTO 10 — Pruebas, cobertura y limpieza
+Ejecuta realmente:
+
+* python -m pytest --cov=app --cov-report=term-missing
+* python -m ruff check .
+* python -m mypy app
+
+Usa el ejecutable Python del entorno virtual limpio que hayas preparado, no el Python global.
+
+Comprueba:
+- cobertura >= 80 %
+- cantidad de tests que pasan/fallan
+- pruebas de casos correctos y de error
+- secretos
+- .env
+- .db
+- __pycache__
+- .pyc
+- limpieza general del repositorio
+- requirements.txt razonable
+
+PRUEBAS ADICIONALES DE CODE REVIEW
+
+Además de la checklist, revisa el código como un ingeniero senior buscando:
+
+- violaciones de SOLID
+- casos borde sin manejar
+- riesgos de seguridad
+- problemas de rendimiento
+- integridad referencial
+- problemas de concurrencia
+
+No inventes hallazgos para completar categorías.
+Para cada elemento encontrado clasifícalo como:
+
+- incumplimiento comprobado
+- riesgo potencial
+- mejora opcional
+
+EVIDENCIA
+
+* No afirmes que una prueba pasó o falló sin ejecutarla.
+* Conserva los resultados relevantes de los comandos.
+* Si una comprobación no puede realizarse debido a una limitación de tu entorno, clasifícala como: NO VERIFICABLE, no la clasifiques automáticamente como "No cumple".
+
+FORMATO DE OBSERVACIONES
+
+Cada observación debe seguir exactamente:
+
+archivo:línea — qué observaste — qué propones
+
+Ejemplo:
+
+repositories/sql_reading_repository.py:42 — la sesión no se cierra si commit() lanza excepción. Propongo envolverlo en un context manager o mover el close() a un finally.
+
+PREGUNTA DE DISEÑO
+
+Incluye al menos una pregunta relacionada con una decisión arquitectónica real observada en el repositorio.
+
+ENTREGA FINAL
+
+Entrega:
+
+1. Los comandos que ejecutaste y sus resultados relevantes
+
+2. Una tabla con los 10 puntos:
+   - Cumple
+   - Cumple parcialmente
+   - No cumple
+   - No verificable
+   acompañados de evidencia
+
+3. Las observaciones concretas con archivo:línea
+
+4. Los hallazgos adicionales de SOLID, casos borde, seguridad, rendimiento o concurrencia
+
+5. Una pregunta de decisión de diseño
+
+6. Un único veredicto final:
+   - Aprobado
+   - Aprobado con cambios
+   - Solicito cambios
+
+7. La justificación del veredicto
+
+No modifiques ningún archivo del repositorio durante todo el proceso.
+
+Realiza una revisión por pares completa del repositorio en el que estás trabajando actualmente.
+
+CONTEXTO
+
+Repositorio:
+sdlc-electronica-nadia
+
+Rama:
+main
+
+Commit que debe revisarse:
+69151640b28853ec5c2aecfd48ae91888f98e32c
+
+Esta revisión debe realizarse de forma independiente.
+
+No conoces los hallazgos de la revisión humana y no debes intentar inferirlos.
+
+No modifiques ningún archivo versionado.
+No hagas commits.
+No hagas push.
+No corrijas automáticamente ningún problema.
+
+Puedes leer todo el repositorio y ejecutar comandos de terminal necesarios para comprobar objetivamente su comportamiento.
+
+IMPORTANTE SOBRE EL ENTORNO
+
+Primero verifica:
+
+git status --short
+git branch --show-current
+git rev-parse HEAD
+py -0p
+
+Si Python 3.12 está disponible, utiliza Python 3.12 para la revisión.
+
+Para no modificar el repositorio, si necesitas un entorno virtual créalo FUERA del repositorio, por ejemplo dentro de la carpeta temporal del sistema.
+
+No utilices un entorno Python global contaminado para determinar si las instrucciones de instalación son reproducibles.
+
+METODOLOGÍA
+
+No hagas únicamente una revisión estática.
+
+Debes:
+
+1. inspeccionar la raíz completa del repositorio
+2. leer README.md
+3. revisar requirements.txt
+4. revisar pyproject.toml
+5. revisar app/
+6. revisar tests/
+7. revisar migrations/
+8. revisar .github/ cuando sea relevante
+9. inspeccionar los archivos versionados mediante Git
+10. ejecutar realmente las verificaciones necesarias
+
+Antes de instalar las dependencias reales del proyecto, comprueba también si las instrucciones de instalación del README permiten preparar SensorHub en un entorno limpio.
+
+Después prepara correctamente el entorno según los archivos de dependencias del repositorio y continúa la revisión.
+
+CHECKLIST OFICIAL
+
+Evalúa individualmente los siguientes 10 puntos.
+
+PUNTO 1 — El PR/proyecto se entiende y se puede probar sin preguntar
+
+Comprueba:
+- que las instrucciones expliquen qué se debe instalar
+- comandos exactos para ejecutar el proyecto
+- comandos para ejecutar pruebas
+- ejemplo de endpoint o JSON
+- que Swagger /docs sea accesible
+- que las instrucciones correspondan al estado actual del proyecto
+
+Si no existe información de un PR concreto, indícalo como no verificable y no como defecto del código.
+
+PUNTO 2 — Se respeta la estructura oficial
+
+La estructura esperada en la raíz de app es:
+
+app/
+  routers/
+  services/
+  repositories/
+  models/
+  schemas/
+  db.py
+
+Comprueba además:
+- que las carpetas históricas semana* no sean importadas desde app/
+- que los paquetes tengan __init__.py
+- que eliminar conceptualmente las carpetas históricas no rompa la API
+
+PUNTO 3 — Cada capa hace solo lo suyo
+
+Comprueba:
+
+router:
+- responsabilidades HTTP
+- rutas
+- parámetros
+- Depends
+- HTTPException
+- response_model
+
+service:
+- reglas de negocio
+- coordinación de operaciones
+- no debe depender directamente de FastAPI ni ejecutar SQLAlchemy
+
+repository:
+- persistencia
+- consultas
+- interacción con SQLAlchemy
+
+models:
+- entidades persistentes
+
+Busca especialmente:
+- queries dentro de routers
+- reglas de negocio dentro de routers
+- SQLAlchemy dentro de services
+- routers accediendo directamente a repositories
+- routers accediendo a atributos internos como _repo
+
+PUNTO 4 — Verbos, rutas y códigos HTTP
+
+Comprueba realmente que existan y funcionen:
+
+GET /sensors/{id}/readings -> 200
+POST /sensors/{id}/readings -> 201
+GET /readings/{id} -> 200
+PATCH /readings/{id} -> 200
+DELETE /readings/{id} -> 204
+
+Comprueba también:
+- uso correcto de PATCH frente a PUT
+- ausencia de verbos innecesarios dentro de las rutas
+- OpenAPI generado realmente por la aplicación
+
+PUNTO 5 — Paginación y filtros
+
+Comprueba:
+
+GET /sensors/{id}/readings
+
+con:
+- limit
+- offset
+- from
+- to
+
+Realiza una prueba real con varias lecturas y al menos:
+
+limit=2&offset=0
+limit=2&offset=2
+limit=2&offset=4
+
+Comprueba que no se repitan ni se salten elementos.
+
+Comprueba:
+- límite máximo permitido
+- dónde se aplican limit y offset
+- orden utilizado por la consulta
+- si el orden sigue siendo determinista cuando dos filas tienen el mismo timestamp
+
+PUNTO 6 — Pydantic valida entrada y salida con reglas físicas
+
+Comprueba:
+- esquemas separados de entrada y salida
+- response_model
+- unidades válidas
+- valores físicamente inválidos
+
+Prueba realmente, como mínimo:
+
+temperatura -300 C
+temperatura con unidad "kelvins"
+temperatura con unidad "K"
+humedad 150 %
+humedad 50 %
+
+Comprueba dónde se realiza cada validación y diferencia validación Pydantic de reglas de negocio.
+
+PUNTO 7 — Manejo de errores
+
+Comprueba respuestas para:
+
+- recurso inexistente
+- conflicto
+- contrato inválido
+- identificador con tipo incorrecto
+- body incompleto
+- JSON sintácticamente malformado
+
+La checklist utiliza como referencia:
+
+400 -> petición malformada
+404 -> recurso inexistente
+409 -> conflicto
+422 -> contrato inválido
+
+Comprueba además que:
+- ValueError no escape como 500
+- no haya except pass
+- no se devuelva 200 para recursos inexistentes
+- los mensajes no expongan información sensible
+
+PUNTO 8 — SQLAlchemy 2.x y patrón repositorio
+
+Comprueba:
+- Mapped[...]
+- mapped_column
+- select()
+- ausencia de session.query()
+- ausencia de Column() de estilo antiguo
+- índices donde corresponde, especialmente sensor_id
+- fechas conscientes de zona horaria, por ejemplo datetime.now(UTC) o equivalente
+- ausencia de bases .db versionadas
+
+PUNTO 9 — DIP y cierre de sesiones
+
+Comprueba:
+- Repository definidos mediante Protocol u otra abstracción
+- services dependiendo de abstracciones
+- get_db usando yield
+- cierre de sesión mediante finally
+- routers utilizando métodos públicos del service
+- ausencia de acceso directo router -> repository cuando la arquitectura exige service
+- posibilidad de probar los services mediante repositorios falsos sin base de datos real
+
+PUNTO 10 — Pruebas, cobertura y limpieza
+
+Ejecuta realmente:
+
+python -m pytest --cov=app --cov-report=term-missing
+python -m ruff check .
+python -m mypy app
+
+Usa el ejecutable Python del entorno virtual limpio que hayas preparado, no el Python global.
+
+Comprueba:
+- cobertura >= 80 %
+- cantidad de tests que pasan/fallan
+- pruebas de casos correctos y de error
+- secretos
+- .env
+- .db
+- __pycache__
+- .pyc
+- limpieza general del repositorio
+- requirements.txt razonable
+
+PRUEBAS ADICIONALES DE CODE REVIEW
+
+Además de la checklist, revisa el código como un ingeniero senior buscando:
+
+- violaciones de SOLID
+- casos borde sin manejar
+- riesgos de seguridad
+- problemas de rendimiento
+- integridad referencial
+- problemas de concurrencia
+
+No inventes hallazgos para completar categorías.
+
+Para cada elemento encontrado clasifícalo como:
+
+- incumplimiento comprobado
+- riesgo potencial
+- mejora opcional
+
+EVIDENCIA
+
+No afirmes que una prueba pasó o falló sin ejecutarla.
+
+Conserva los resultados relevantes de los comandos.
+
+Si una comprobación no puede realizarse debido a una limitación de tu entorno, clasifícala como:
+
+NO VERIFICABLE
+
+No la clasifiques automáticamente como "No cumple".
+
+FORMATO DE OBSERVACIONES
+
+Cada observación debe seguir exactamente:
+
+archivo:línea — qué observaste — qué propones
+
+Ejemplo:
+
+repositories/sql_reading_repository.py:42 — la sesión no se cierra si commit() lanza excepción. Propongo envolverlo en un context manager o mover el close() a un finally.
+
+PREGUNTA DE DISEÑO
+
+Incluye al menos una pregunta relacionada con una decisión arquitectónica real observada en el repositorio.
+
+ENTREGA FINAL
+
+Entrega:
+
+1. Los comandos que ejecutaste y sus resultados relevantes
+
+2. Una tabla con los 10 puntos:
+   - Cumple
+   - Cumple parcialmente
+   - No cumple
+   - No verificable
+   acompañados de evidencia
+
+3. Las observaciones concretas con archivo:línea
+
+4. Los hallazgos adicionales de SOLID, casos borde, seguridad, rendimiento o concurrencia
+
+5. Una pregunta de decisión de diseño
+
+6. Un único veredicto final:
+   - Aprobado
+   - Aprobado con cambios
+   - Solicito cambios
+
+7. La justificación del veredicto
+
+No modifiques ningún archivo del repositorio durante todo el proceso. 
+
+### Sugerencias de mejora por la IA
+
+1. Crear `AlertService`
+* para evitar que `app/routers/alerts.py` acceda directamente a `AlertRepositor`
+* para mantener la arquitectura:
+`router -> service -> repository`
+
+2. Refactorizar `alerts.py`
+
+* Sustituir `get_alert_repository()` por una dependencia tipo `get_alert_service()`
+
+3. Agregar límite defensivo en `SQLAlchemyReadingRepository.list_for_sensor()`
+
+Propuso algo como:
+
+``` python
+safe_limit = max(1, min(limit, 500))
+safe_offset = max(0, offset)
+```
+Su argumento fue evitar consultas excesivamente grandes
+
+4. Corregir los 4 errores de Ruff
+
+Principalmente líneas mayores a 100 caracteres en:
+
+* app/repositories/alert_repository.py
+* app/repositories/sqlalchemy_alert_repository.py
+
+5. Documentar el límite de paginación en OpenAPI
+
+* Especialmente el comportamiento de reducción o límite máximo de limit
+* Revisar el manejo de errores durante la detección de anomalías
+* Señaló que si `self._detector.is_anomaly()` falla, la lectura podría haberse persistido pero la alerta no
+* Propuso manejo adicional de excepciones
+* Agregar pruebas de concurrencia con `asyncio` o `concurrent.futures`. Para probar solicitudes simultáneas y posibles condiciones de carrera
+
+También mencionó como mejoras opcionales:
+
+* hacer más robusta la conversión de DATABASE_URL
+* agregar logging de conexiones/desconexiones en get_db()
+* evaluar si el módulo de alertas debería tener más operaciones además de GET
+* considerar mejoras de paginación y concurrencia.
+
+### Veredicto de Copilot
+
+Copilot concluyó: SOLICITO CAMBIOS
+
+Su razón principal fue la ruptura arquitectónica:
+`AlertRouter -> AlertRepository`
+
+en lugar de:
+`AlertRouter -> AlertService -> AlertRepository`
+
+### Principales hallazgos
+Con herramienta equivalente, Copilot mejoró muchísimo: encontró la ruptura router → repository, ejecutó la suite, encontró Ruff y comprobó funcionalmente la API. Pero siguió cometiendo varios errores aun teniendo la evidencia disponible. 
+
+1. Copilot calificó: Punto 1 — Cumple
+
+Afirmó que el README tenía “instrucciones de instalación claras”. Pero yo probé en un entorno limpio que seguir literalmente:
+
+`py -m pip install pytest mypy ruff` dejaba fuera FastAPI y Uvicorn.
+
+Además, Copilot no siguió una parte explícita del prompt, debía probar primero las instrucciones del README y después instalar correctamente `requirements.txt.` En lugar de eso saltó directamente a `python -m pip install -r requirements.txt`. Por eso no detectó el problema.
+
+2. Contradicción interna
+
+Copilot escribió en la misma fila `app/models/ presentes` y después No hay `app/models/`. También afirmó que todos tienen `__init__.py`aunque comprobamos que faltan en:
+
+* app/routers/
+* app/services/
+* app/schemas/
+
+Por tanto, su clasificación "Cumple parcialmente" es razonable, pero parte de la evidencia escrita es incorrecta.
+
+3. `created_at` no garantiza orden total
+
+Copilot afirmó: `order_by(created_at)` determinista. Eso es demasiado fuerte.
+
+La consulta es: `.order_by(ReadingModel.created_at)`. Si dos registros comparten exactamente el mismo `created_at`, no existe un segundo criterio explícito.
+
+Mi observación fue que la paginación ordena únicamente por `create.
+
+4. Omitió la prueba de JSON malformado
+
+Copilot marcó "Cumple" pero la checklist solicitaba comprobar específicamente una petición malformada. La prueba real fue:
+
+JSON sintácticamente inválido
+→ 422
+→ type=json_invalid
+
+frente al 400 establecido por la checklist.
+
+### Conclusiones de la comparación entre revisión humana e IA
+
+1. Al proporcionar a Copilot CLI acceso al mismo repositorio, una terminal y un entorno Python 3.12 aislado, la revisión con IA fue capaz de reproducir una parte importante de la revisión humana: ejecutó 92 pruebas con 91.38 % de cobertura, comprobó Ruff y mypy, realizó pruebas HTTP y detectó la dependencia directa del router de alertas sobre `AlertRepository`. Esto mostró que proporcionar herramientas y contexto operativo mejora de forma considerable la calidad de una revisión asistida por IA.
+
+2. Incluso disponiendo del repositorio completo y capacidad de ejecución, la IA no sustituyó la revisión humana. Copilot afirmó incorrectamente que el README permitía instalar y probar correctamente el proyecto porque instaló directamente `requirements.txt` en lugar de comprobar primero las instrucciones del README; también consideró determinista un orden basado únicamente en `created_at`, no detectó la diferencia entre 422 y el 400 solicitado para JSON malformado y produjo algunas conclusiones internamente contradictorias. La revisión humana fue necesaria para contrastar las afirmaciones de la IA con la evidencia y con la checklist.
+
+3. La experiencia mostró que una revisión con IA debe evaluarse en dos dimensiones: las capacidades disponibles y la calidad del razonamiento aplicado sobre ellas. Al utilizar Copilot CLI con repositorio y terminal la cobertura del análisis mejoró, pero todavía aparecieron omisiones, sobreinterpretaciones y riesgos no sustentados. Por ello, la IA resultó útil como segundo revisor para ampliar la búsqueda de problemas, mientras que la decisión final sobre qué constituye un defecto, un riesgo potencial o una mejora opcional requirió revisión humana.
