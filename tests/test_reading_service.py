@@ -4,7 +4,11 @@ from unittest.mock import Mock
 import pytest
 
 from app.domain.alert_strategy import ThresholdAlertStrategy
-from app.exceptions import InvalidDateTimezoneError, InvalidPaginationError
+from app.exceptions import (
+    InvalidDateTimezoneError,
+    InvalidPaginationError,
+    SensorInactiveError,
+)
 from app.models import Sensor
 from app.schemas import ReadingCreate
 from app.services.reading_service import ReadingService
@@ -171,3 +175,41 @@ def test_create_reading_above_threshold_creates_alert() -> None:
     assert alert.reading_id == reading.id
     assert alert.value == 31.0
     assert alert.threshold == 30.0
+
+# Rechazo de lecturas para sensores inactivos
+def test_create_reading_rejects_inactive_sensor() -> None:
+    # Preparar repositorios aislados para probar la regla sin base de datos
+    sensor_repository = FakeSensorRepository()
+    reading_repository = FakeReadingRepository()
+
+    # Registrar un sensor desactivado que debe conservarse pero no aceptar telemetría
+    sensor = sensor_repository.create(
+        Sensor(
+            code="TEMP-INACTIVE-001",
+            name="Sensor de temperatura inactivo",
+            location="Laboratorio de electrónica",
+            sensor_type="temperature",
+            unit="°C",
+            is_active=False,
+        )
+    )
+
+    service = ReadingService(
+        reading_repository,
+        sensor_repository,
+    )
+
+    # Rechazar la ingesta porque el recurso existe pero está deshabilitado
+    with pytest.raises(
+        SensorInactiveError,
+        match=f"El sensor con id {sensor.id} está inactivo",
+    ):
+        service.create_reading(
+            sensor.id,
+            ReadingCreate(
+                value=25.0,
+            ),
+        )
+
+    # Confirmar que la operación se detenga antes de persistir una lectura
+    assert reading_repository.get_by_id(1) is None

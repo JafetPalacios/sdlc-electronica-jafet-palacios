@@ -10,7 +10,7 @@ from app.exceptions import (
     ReadingNotFoundError,
     ReadingValueOutOfRangeError,
     SensorCodeConflictError,
-    SensorHasReadingsError,
+    SensorInactiveError,
     SensorNotFoundError,
     UnsupportedSensorTypeError,
 )
@@ -72,17 +72,17 @@ async def handle_sensor_code_conflict(
         },
     )
 
-
-# Convertimos una eliminación bloqueada en una respuesta HTTP 409
-@app.exception_handler(SensorHasReadingsError)
-async def handle_sensor_has_readings(
+# Convertir un sensor inactivo en una respuesta HTTP 409
+@app.exception_handler(SensorInactiveError)
+async def handle_sensor_inactive(
     request: Request,
-    exc: SensorHasReadingsError,
+    exc: SensorInactiveError,
 ) -> JSONResponse:
+    # Conservar la petición disponible para futuras tareas de trazabilidad
+    _ = request
 
-    _ = request                                                             # Conservamos la petición disponible para futuras tareas de trazabilidad
-
-    return JSONResponse(                                                    # Informamos que el sensor no puede eliminarse por sus relaciones existentes
+    # Informar que el recurso existe pero su estado impide registrar lecturas
+    return JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
         content={
             "detail": str(exc),

@@ -15,6 +15,7 @@ def create_sensor(
     *,
     code: str = "HUM-001",
     name: str = "Sensor de humedad",
+    location: str = "Laboratorio de electrónica",
     sensor_type: str = "humidity",
     unit: str = "%",
 ) -> dict[str, object]:
@@ -24,6 +25,7 @@ def create_sensor(
         json={
             "code": code,
             "name": name,
+            "location": location,
             "sensor_type": sensor_type,
             "unit": unit,
         },
@@ -309,6 +311,7 @@ def test_create_reading_above_threshold_persists_alert(
         json={
             "code": "TEMP-ALERT-READING-001",
             "name": "Sensor de temperatura con alerta",
+            "location": "Laboratorio de electrónica",
             "sensor_type": "temperature",
             "unit": "°C",
             "alert_threshold": 30.0,
@@ -346,3 +349,44 @@ def test_create_reading_above_threshold_persists_alert(
     assert alert.reading_id == reading_id
     assert alert.value == 31.0
     assert alert.threshold == 30.0
+
+# Rechazo HTTP de lecturas para sensores inactivos
+def test_create_reading_for_inactive_sensor_returns_409(
+    client: TestClient,
+) -> None:
+    # Crear un sensor activo mediante la API
+    sensor = create_sensor(
+        client,
+        code="TEMP-INACTIVE-API-001",
+        name="Sensor de temperatura inactivo",
+        location="Laboratorio de electrónica",
+        sensor_type="temperature",
+        unit="°C",
+    )
+
+    sensor_id = sensor["id"]
+
+    # Desactivar el sensor antes de intentar registrar telemetría
+    deactivate_response = client.patch(
+        f"/sensors/{sensor_id}",
+        json={
+            "is_active": False,
+        },
+    )
+
+    assert deactivate_response.status_code == status.HTTP_200_OK
+    assert deactivate_response.json()["is_active"] is False
+
+    # Intentar registrar una nueva lectura sobre el sensor desactivado
+    response = client.post(
+        f"/sensors/{sensor_id}/readings",
+        json={
+            "value": 25.0,
+        },
+    )
+
+    # Verificar que el estado actual del sensor impida la operación
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert response.json() == {
+        "detail": f"El sensor con id {sensor_id} está inactivo",
+    }

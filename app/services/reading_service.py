@@ -8,6 +8,7 @@ from app.exceptions import (
     InvalidPaginationError,
     ReadingNotFoundError,
     ReadingValueOutOfRangeError,
+    SensorInactiveError,
     SensorNotFoundError,
 )
 from app.models import Alert, Reading
@@ -63,18 +64,22 @@ class ReadingService:
 
 
     # Creación de lecturas
-    def create_reading(                                                         # Registramos nuevas mediciones únicamente para sensores existentes
+    def create_reading(
         self,
         sensor_id: int,
         reading_data: ReadingCreate,
     ) -> Reading:
 
-        sensor = self._sensor_repository.get_by_id(sensor_id)                   # Consultamos el sensor indicado antes de construir la lectura
+        sensor = self._sensor_repository.get_by_id(sensor_id)                   # Consultar el sensor indicado antes de construir la lectura
 
-        if sensor is None:                                                      # Interrumpimos la operación cuando el sensor propietario no existe
+        if sensor is None:                                                      # Interrumpir la operación cuando el sensor propietario no existe
             raise SensorNotFoundError(sensor_id)
 
-        self._validate_reading_value(                                           # Validamos el valor usando la regla asociada al tipo del sensor
+        # Rechazar nuevas lecturas cuando el sensor fue desactivado
+        if sensor.is_active is False:
+            raise SensorInactiveError(sensor_id)
+
+        self._validate_reading_value(                                           # Validar el valor usando la regla asociada al tipo del sensor
             sensor_type=sensor.sensor_type,
             value=reading_data.value,
         )
@@ -84,11 +89,10 @@ class ReadingService:
             value=reading_data.value,
         )
 
-        # Persistimos primero la lectura para disponer de su identificador definitivo
+        # Persistir primero la lectura para disponer de su identificador definitivo
         created_reading = self._reading_repository.create(reading)
 
-        # Evaluamos la lectura cuando el sensor tiene un umbral configurado
-        # y disponemos de los colaboradores encargados de generar alertas
+        # Evaluar la lectura cuando el sensor tenga un umbral configurado
         if (
             sensor.alert_threshold is not None
             and self._alert_repository is not None

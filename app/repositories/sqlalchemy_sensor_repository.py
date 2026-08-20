@@ -64,9 +64,3 @@ class SqlAlchemySensorRepository(SensorRepository):
         self._db.refresh(sensor)                                        # Sincronizamos la instancia con los valores almacenados
 
         return sensor
-
-    # Operaciones de eliminación: Eliminamos un sensor existente y confirmamos la transacción
-    def delete(self, sensor: Sensor) -> None:
-
-        self._db.delete(sensor)                                         # Marcamos la entidad para su eliminación
-        self._db.commit()                                               # Confirmamos la transacción para ejecutar el DELETE

@@ -14,6 +14,7 @@ def test_create_alert_persists_alert(
     sensor = Sensor(
         code="TEMP-ALERT-DB-001",
         name="Sensor de temperatura con alerta",
+        location="Laboratorio de electrónica",
         sensor_type="temperature",
         unit="°C",
         alert_threshold=30.0,
@@ -68,6 +69,7 @@ def test_list_alerts_for_sensor_returns_only_matching_alerts(
     first_sensor = Sensor(
         code="TEMP-ALERT-LIST-001",
         name="Primer sensor con alertas",
+        location="Laboratorio de electrónica",
         sensor_type="temperature",
         unit="°C",
         alert_threshold=30.0,
@@ -76,6 +78,7 @@ def test_list_alerts_for_sensor_returns_only_matching_alerts(
     second_sensor = Sensor(
         code="TEMP-ALERT-LIST-002",
         name="Segundo sensor con alertas",
+        location="Laboratorio de electrónica",
         sensor_type="temperature",
         unit="°C",
         alert_threshold=40.0,

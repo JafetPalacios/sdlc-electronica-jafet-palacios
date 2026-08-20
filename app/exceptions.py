@@ -26,16 +26,16 @@ class SensorCodeConflictError(SensorHubError):
             f"Ya existe un sensor con el código {code}"
         )
 
-# Indicamos que un sensor no puede eliminarse porque conserva lecturas
-class SensorHasReadingsError(SensorHubError):
+# Indicar que un sensor existe pero no está habilitado para recibir nuevas lecturas
+class SensorInactiveError(SensorHubError):
 
-    def __init__(self, sensor_id: int) -> None:                         # Construimos el error con el identificador del sensor relacionado
+    def __init__(self, sensor_id: int) -> None:
+        # Conservar el identificador para facilitar pruebas y trazabilidad
+        self.sensor_id = sensor_id
 
-        self.sensor_id = sensor_id                                      # Conservamos el identificador para facilitar pruebas y trazabilidad
-
-        super().__init__(                                               # Explicamos por qué la operación de eliminación fue rechazada
-            f"No se puede eliminar el sensor con id {sensor_id} "
-            "porque tiene lecturas asociadas"
+        # Explicar que el estado operativo impide registrar nuevas lecturas
+        super().__init__(
+            f"El sensor con id {sensor_id} está inactivo"
         )
 
 # Excepciones relacionadas con lecturas: # Agrupamos aquí los errores propios de las operaciones sobre lecturas

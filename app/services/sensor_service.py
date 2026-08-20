@@ -2,7 +2,6 @@ from app.domain.sensor_rules import SENSOR_RULES
 from app.exceptions import (
     InvalidSensorUnitError,
     SensorCodeConflictError,
-    SensorHasReadingsError,
     SensorNotFoundError,
     UnsupportedSensorTypeError,
 )
@@ -57,14 +56,15 @@ class SensorService:
         if existing_sensor is not None:                                                                 # Interrumpimos la operación cuando el código ya está registrado
             raise SensorCodeConflictError(sensor_data.code)
 
-        sensor = Sensor(                                                                                # Construimos la entidad ORM con los datos validados por Pydantic
+        sensor = Sensor(                                      # Construir la entidad con los datos validados antes de persistirla
             code=sensor_data.code,
             name=sensor_data.name,
+            location=sensor_data.location,
             sensor_type=sensor_data.sensor_type,
             unit=sensor_data.unit,
             alert_threshold=sensor_data.alert_threshold,
+            is_active=True,
         )
-
         return self._repository.create(sensor)                                                          # Delegamos la inserción y recuperación del estado final al repositorio
 
     # Consulta paginada
@@ -139,16 +139,3 @@ class SensorService:
             )
 
         return self._repository.update(sensor)                                                          # Delegamos la confirmación de cambios y la recarga al repositorio
-
-    # Eliminación de sensores
-    def delete_sensor(self, sensor_id: int) -> None:                                                    # Eliminamos un sensor únicamente cuando existe y no conserva lecturas
-                                                                                                        # Protegemos así la integridad de los datos históricos asociados
-        sensor = self._repository.get_by_id(sensor_id)                                                  # Recuperamos el sensor antes de solicitar su eliminación
-
-        if sensor is None:                                                                              # Evitamos ejecutar una eliminación sobre un registro inexistente
-            raise SensorNotFoundError(sensor_id)
-
-        if sensor.readings:                                                                             # Comprobamos si existen lecturas relacionadas con el sensor
-            raise SensorHasReadingsError(sensor_id)
-
-        self._repository.delete(sensor)                                                                 # Delegamos la eliminación definitiva y el commit al repositorio

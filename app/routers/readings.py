@@ -77,6 +77,10 @@ EndDateQuery = Annotated[
         status.HTTP_422_UNPROCESSABLE_CONTENT: {
             "description": "El identificador o el valor recibido no son válidos",
         },
+
+                status.HTTP_409_CONFLICT: {
+            "description": "El sensor existe pero está inactivo",
+        },
     },
 )
 def create_reading(

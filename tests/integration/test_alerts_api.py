@@ -12,6 +12,7 @@ def test_list_alerts_for_sensor_returns_generated_alert(
         json={
             "code": "TEMP-ALERT-API-001",
             "name": "Sensor de temperatura con alertas",
+            "location": "Laboratorio de electrónica",
             "sensor_type": "temperature",
             "unit": "°C",
             "alert_threshold": 30.0,
@@ -64,6 +65,7 @@ def test_list_alerts_for_sensor_without_alerts_returns_empty_list(
         json={
             "code": "TEMP-ALERT-EMPTY-001",
             "name": "Sensor sin alertas",
+            "location": "Laboratorio de electrónica",
             "sensor_type": "temperature",
             "unit": "°C",
             "alert_threshold": 30.0,

@@ -158,27 +158,33 @@ jobs:
           # Comprobamos que las tablas principales fueron creadas por las migraciones
           tables = set(inspect(engine).get_table_names())
 
-          assert revision == "ccdeecc8c528"
+          assert revision == "8f1f8f0a69a8"
           assert {"alembic_version", "sensors", "readings", "alerts"} <= tables
 
-          # Ejecutamos un flujo funcional real contra PostgreSQL
+          # Ejecutar un flujo funcional real contra PostgreSQL
           with TestClient(app) as client:
-              # Creamos un sensor de humedad mediante la API
+              # Crear un sensor de humedad mediante la API
               sensor_response = client.post(
                   "/sensors/",
                   json={
                       "code": "SMOKE-HUM-001",
                       "name": "Sensor smoke PostgreSQL",
+                      "location": "CI PostgreSQL",
                       "sensor_type": "humidity",
                       "unit": "%",
                   },
               )
 
+              # Verificar el contrato actualizado del sensor
               assert sensor_response.status_code == 201
+
               sensor = sensor_response.json()
               sensor_id = sensor["id"]
 
-              # Registramos una lectura válida para el sensor creado
+              assert sensor["location"] == "CI PostgreSQL"
+              assert sensor["is_active"] is True
+
+              # Registrar una lectura válida para el sensor creado
               reading_response = client.post(
                   f"/sensors/{sensor_id}/readings",
                   json={
@@ -190,7 +196,7 @@ jobs:
               reading = reading_response.json()
               reading_id = reading["id"]
 
-              # Consultamos nuevamente la lectura para verificar persistencia
+              # Consultar nuevamente la lectura para verificar persistencia
               get_reading_response = client.get(
                   f"/readings/{reading_id}",
               )
