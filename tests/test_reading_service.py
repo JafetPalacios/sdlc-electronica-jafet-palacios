@@ -3,6 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from app.domain.alert_lifecycle import AlertStatus
 from app.domain.alert_strategy import AlertSeverity, ThresholdAlertStrategy
 from app.exceptions import (
     InvalidDateTimezoneError,
@@ -176,6 +177,7 @@ def test_create_reading_above_threshold_creates_alert() -> None:
     assert alert.value == 31.0
     assert alert.threshold == 30.0
     assert alert.severity == AlertSeverity.WARNING
+    assert alert.status == AlertStatus.OPEN
 
 
 # Generación de alerta crítica al superar ampliamente el umbral configurado
@@ -212,6 +214,7 @@ def test_create_reading_far_above_threshold_creates_critical_alert() -> None:
     alert = alert_repository.create.call_args.args[0]
 
     assert alert.severity == AlertSeverity.CRITICAL
+    assert alert.status == AlertStatus.OPEN
 
 # Rechazo de lecturas para sensores inactivos
 def test_create_reading_rejects_inactive_sensor() -> None:

@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from app.domain.alert_lifecycle import AlertStatus
 from app.domain.alert_strategy import AlertStrategy
 from app.domain.sensor_rules import SENSOR_RULES
 from app.exceptions import (
@@ -114,6 +115,7 @@ class ReadingService:
                 value=created_reading.value,
                 threshold=sensor.alert_threshold,
                 severity=severity,
+                status=AlertStatus.OPEN,
             )
 
             self._alert_repository.create(alert)

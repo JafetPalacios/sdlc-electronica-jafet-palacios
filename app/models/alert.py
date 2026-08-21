@@ -4,6 +4,7 @@ from sqlalchemy import DateTime, Enum, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
+from app.domain.alert_lifecycle import AlertStatus
 from app.domain.alert_strategy import AlertSeverity
 
 
@@ -49,6 +50,23 @@ class Alert(Base):
             validate_strings=True,
         ),
         default=AlertSeverity.WARNING,
+        nullable=False,
+    )
+
+    # Conservamos el estado operativo de la alerta dentro de su ciclo de vida
+    status: Mapped[AlertStatus] = mapped_column(
+        Enum(
+            AlertStatus,
+            name="alertstatus",
+            native_enum=False,
+            create_constraint=True,
+            validate_strings=True,
+            values_callable=lambda statuses: [
+                status.value
+                for status in statuses
+            ],
+        ),
+        default=AlertStatus.OPEN,
         nullable=False,
     )
 

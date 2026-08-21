@@ -1,4 +1,9 @@
-from app.exceptions import SensorNotFoundError
+from app.domain.alert_lifecycle import AlertStatus, can_transition_alert
+from app.exceptions import (
+    AlertNotFoundError,
+    InvalidAlertStatusTransitionError,
+    SensorNotFoundError,
+)
 from app.models import Alert
 from app.repositories.alert_repository import AlertRepository
 from app.repositories.sensor_repository import SensorRepository
@@ -32,3 +37,35 @@ class AlertService:
 
         # Delegamos al repositorio la recuperación de las alertas almacenadas
         return self._alert_repository.list_for_sensor(sensor_id)
+
+    # Consulta de alertas que aún requieren seguimiento
+    def list_active_alerts(self) -> list[Alert]:
+
+        return self._alert_repository.list_active()
+
+    # Cambio de estado de una alerta concreta
+    def update_alert_status(
+        self,
+        *,
+        alert_id: int,
+        new_status: AlertStatus,
+    ) -> Alert:
+
+        alert = self._alert_repository.get_by_id(alert_id)
+
+        if alert is None:
+            raise AlertNotFoundError(alert_id)
+
+        if not can_transition_alert(
+            current_status=alert.status,
+            new_status=new_status,
+        ):
+            raise InvalidAlertStatusTransitionError(
+                alert_id=alert_id,
+                current_status=alert.status,
+                new_status=new_status,
+            )
+
+        alert.status = new_status
+
+        return self._alert_repository.update(alert)

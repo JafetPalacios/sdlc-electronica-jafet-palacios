@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.domain.alert_lifecycle import AlertStatus
 from app.domain.alert_strategy import AlertSeverity
 from app.models import Alert, Reading
 
@@ -480,6 +481,7 @@ def test_create_reading_above_threshold_persists_alert(
     assert alert.value == 31.0
     assert alert.threshold == 30.0
     assert alert.severity == AlertSeverity.WARNING
+    assert alert.status == AlertStatus.OPEN
 
 
 # Generación persistente de alerta crítica desde el flujo HTTP de lecturas
@@ -522,6 +524,7 @@ def test_create_reading_far_above_threshold_persists_critical_alert(
 
     assert len(alerts) == 1
     assert alerts[0].severity == AlertSeverity.CRITICAL
+    assert alerts[0].status == AlertStatus.OPEN
 
 # Rechazo HTTP de lecturas para sensores inactivos
 def test_create_reading_for_inactive_sensor_returns_409(

@@ -1,3 +1,6 @@
+from app.domain.alert_lifecycle import AlertStatus
+
+
 # Excepciones base del dominio
 # Definimos una jerarquía común para representar errores propios de SensorHub
 # Esto permite distinguir fallos de negocio de errores técnicos o de infraestructura
@@ -36,6 +39,38 @@ class SensorInactiveError(SensorHubError):
         # Explicar que el estado operativo impide registrar nuevas lecturas
         super().__init__(
             f"El sensor con id {sensor_id} está inactivo"
+        )
+
+
+# Excepciones relacionadas con alertas
+class AlertNotFoundError(SensorHubError):
+
+    def __init__(self, alert_id: int) -> None:
+
+        self.alert_id = alert_id
+
+        super().__init__(
+            f"No existe una alerta con id {alert_id}"
+        )
+
+
+# Indicamos que la transición solicitada no respeta el ciclo de vida definido
+class InvalidAlertStatusTransitionError(SensorHubError):
+
+    def __init__(
+        self,
+        alert_id: int,
+        current_status: AlertStatus,
+        new_status: AlertStatus,
+    ) -> None:
+
+        self.alert_id = alert_id
+        self.current_status = current_status
+        self.new_status = new_status
+
+        super().__init__(
+            f"No se puede cambiar la alerta {alert_id} de "
+            f"{current_status.value} a {new_status.value}"
         )
 
 # Excepciones relacionadas con lecturas: # Agrupamos aquí los errores propios de las operaciones sobre lecturas

@@ -133,3 +133,59 @@ Resultados obtenidos:
 - flujo HTTP real validado contra PostgreSQL con alerta `CRITICAL`
 - severidad `WARNING` verificada en pruebas unitarias, integración y persistencia
 - severidad `CRITICAL` verificada en pruebas unitarias, integración y PostgreSQL real
+
+## RF-5 — Gestión de alertas
+
+Se establece que el sistema debe permitir consultar alertas activas, consultar alertas asociadas a sensores, manejar estados de alerta y cambiar una alerta entre estados válidos usando `open`, `acknowledged` y `resolved`. La implementación existente sólo ofrecía consulta por sensor y no tenía estado, transición ni una definición de qué significaba una alerta activa.
+
+### Consulta realizada a la IA
+
+Se solicitó apoyo para auditar RF-5 a partir del estado alcanzado tras RF-4, identificar la brecha funcional exacta y aplicar el cambio mínimo manteniendo la lógica de ciclo de vida dentro del dominio y sin mezclar responsabilidades entre router, servicio y repositorio.
+
+La IA identificó las siguientes brechas demostrables:
+
+- `Alert` no tenía campo `status`
+- no existía endpoint para listar alertas activas
+- no existía endpoint para cambiar el estado de una alerta
+- no había política explícita de transiciones válidas
+- no existían pruebas para listar activas, cambiar estado ni rechazar transiciones inválidas
+
+Se adoptó una política mínima y explícita para cerrar el requisito:
+
+- alertas activas = `open` y `acknowledged`
+- transiciones válidas = `open -> acknowledged`, `open -> resolved`, `acknowledged -> resolved`
+- no se permiten reaperturas ni transiciones al mismo estado
+
+Durante la validación contra PostgreSQL real del viernes 21 de agosto de 2026 apareció una discrepancia no visible en SQLite: el modelo estaba persistiendo el nombre del enum (`OPEN`) mientras la migración había creado el constraint con los valores requeridos (`open`, `acknowledged`, `resolved`). Se corrigió el modelo para persistir los valores públicos del enum y se repitió la validación real hasta dejarla en verde.
+
+### Decisión final
+
+Se adoptó el siguiente comportamiento:
+
+- `GET /alerts/active` devuelve únicamente alertas con estado `open` o `acknowledged`
+- `GET /sensors/{sensor_id}/alerts` sigue devolviendo las alertas asociadas al sensor
+- `PATCH /alerts/{alert_id}` permite cambiar el estado respetando la política del dominio
+- una alerta nueva se crea en estado `open`
+- una transición inválida produce conflicto HTTP `409`
+- una alerta inexistente produce HTTP `404`
+- la migración `6f8a9b0c1d2e` agrega la columna `status` a la tabla `alerts`
+
+### Resultado verificado
+
+Se verificó el comportamiento mediante pruebas unitarias, integración HTTP, persistencia SQLAlchemy, migraciones Alembic y una ejecución real con PostgreSQL 16.
+Resultados obtenidos:
+
+- 64 pruebas aprobadas
+- cobertura total de 94.53 %
+- Ruff sin errores
+- mypy sin errores
+- `pytest tests/test_alert_service.py tests/test_sqlalchemy_alert_repository.py tests/integration/test_alerts_api.py tests/test_reading_service.py tests/integration/test_readings_api.py -q` en verde
+- `python -m alembic heads` con un único head: `6f8a9b0c1d2e`
+- upgrade Alembic validado sobre SQLite temporal
+- downgrade Alembic validado hasta `base`
+- upgrade Alembic validado sobre PostgreSQL 16 real
+- revisión confirmada en PostgreSQL: `6f8a9b0c1d2e`
+- alerta nueva validada en PostgreSQL con estado inicial `open`
+- transición `open -> acknowledged` validada en PostgreSQL real
+- listado de alertas activas validado en integración y PostgreSQL real
+- transición inválida rechazada con HTTP `409`

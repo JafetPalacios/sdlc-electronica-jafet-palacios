@@ -12,7 +12,22 @@ class AlertRepository(Protocol):
 
         ...
 
-        # Recuperamos las alertas registradas para un sensor concreto
+    # Recuperamos una alerta concreta mediante su identificador
+    def get_by_id(self, alert_id: int) -> Alert | None:
+
+        ...
+
+    # Recuperamos las alertas registradas para un sensor concreto
     def list_for_sensor(self, sensor_id: int) -> list[Alert]:
+
+        ...
+
+    # Recuperamos únicamente alertas que siguen activas
+    def list_active(self) -> list[Alert]:
+
+        ...
+
+    # Persistimos una alerta previamente modificada
+    def update(self, alert: Alert) -> Alert:
 
         ...

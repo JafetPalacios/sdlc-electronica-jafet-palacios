@@ -4,6 +4,8 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
 from app.exceptions import (
+    AlertNotFoundError,
+    InvalidAlertStatusTransitionError,
     InvalidDateRangeError,
     InvalidDateTimezoneError,
     InvalidSensorUnitError,
@@ -82,6 +84,42 @@ async def handle_sensor_inactive(
     _ = request
 
     # Informar que el recurso existe pero su estado impide registrar lecturas
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={
+            "detail": str(exc),
+        },
+    ) 
+
+
+#==========[     Manejadores de errores de alertas     ]==========
+
+# Convertimos una alerta inexistente en una respuesta HTTP 404
+@app.exception_handler(AlertNotFoundError)
+async def handle_alert_not_found(
+    request: Request,
+    exc: AlertNotFoundError,
+) -> JSONResponse:
+
+    _ = request
+
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={
+            "detail": str(exc),
+        },
+    )
+
+
+# Convertimos una transición inválida de alerta en una respuesta HTTP 409
+@app.exception_handler(InvalidAlertStatusTransitionError)
+async def handle_invalid_alert_status_transition(
+    request: Request,
+    exc: InvalidAlertStatusTransitionError,
+) -> JSONResponse:
+
+    _ = request
+
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
         content={

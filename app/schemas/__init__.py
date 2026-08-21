@@ -1,4 +1,4 @@
-from app.schemas.alert import AlertResponse
+from app.schemas.alert import AlertResponse, AlertStatusUpdate
 from app.schemas.reading import (
     ReadingCreate,
     ReadingResponse,
@@ -12,6 +12,7 @@ from app.schemas.sensor import (
 
 __all__ = [
     "AlertResponse",
+    "AlertStatusUpdate",
     "ReadingCreate",
     "ReadingResponse",
     "ReadingUpdate",
