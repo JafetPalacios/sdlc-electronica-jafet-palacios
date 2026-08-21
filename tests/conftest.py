@@ -8,6 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.main import app
+from app.monitoring import service_metrics
 
 # Configuración de la base de datos de pruebas
 # Utilizamos SQLite en memoria para mantener las pruebas aisladas
@@ -62,9 +63,11 @@ def client(
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db  # Reemplazamos la dependencia real únicamente durante esta prueba
+    service_metrics.reset()
 
     try:
         with TestClient(app) as test_client:            # Creamos el cliente que ejecutará las peticiones contra la aplicación
             yield test_client
     finally:
         app.dependency_overrides.clear()                # Eliminamos los reemplazos para no afectar pruebas posteriores
+        service_metrics.reset()

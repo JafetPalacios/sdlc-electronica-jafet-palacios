@@ -231,3 +231,45 @@ Resultados obtenidos:
 - estadísticas con rango temporal validadas en servicio e integración
 - contrato de estadísticas vacías validado con `count = 0` y agregados `null`
 - no se requirieron migraciones ni cambios de esquema para cerrar RF-6
+
+## RF-7 — Health check y métricas básicas
+
+Se establece que el sistema debe exponer un mecanismo simple de verificación operativa y métricas básicas para observabilidad sin convertir esa comprobación en una operación pesada o dependiente de consultas innecesarias. La implementación existente ya exponía `GET /health` como un liveness liviano, pero todavía no ofrecía ninguna salida de métricas del proceso ni de tráfico HTTP.
+
+### Consulta realizada a la IA
+
+Se solicitó apoyo para auditar RF-7 después de cerrar RF-6, diferenciar si el requisito estaba completamente faltante o sólo incompleto y aplicar el cambio mínimo sin degradar el contrato existente de `health`.
+
+La IA identificó el siguiente resultado de auditoría:
+
+- `GET /health` ya existía y cumplía bien como liveness básico
+- no existía endpoint `/metrics`
+- no había contadores ni uptime del proceso expuestos para monitoreo
+- la cobertura existente sólo validaba `/health`
+
+Se decidió conservar `/health` como comprobación liviana del proceso y añadir un endpoint `/metrics` en texto plano con formato Prometheus simple. También se agregó un middleware mínimo para registrar conteo y latencia por petición sin introducir dependencias externas ni consultas a base de datos dentro del health check.
+
+### Decisión final
+
+Se adoptó el siguiente comportamiento:
+
+- `GET /health` permanece como liveness liviano del servicio
+- `GET /metrics` expone `uptime` del proceso
+- `GET /metrics` expone contador total de peticiones HTTP por método, ruta y código de estado
+- `GET /metrics` expone conteo y suma acumulada de latencia HTTP por método, ruta y código de estado
+- las métricas se generan en memoria y se reinician entre pruebas para mantener aislamiento
+- no se agregó un readiness check contra base de datos porque el requisito se podía cubrir sin volver pesado el endpoint de salud
+
+### Resultado verificado
+
+Se verificó el comportamiento mediante nuevas pruebas de integración y una regresión completa del proyecto.
+Resultados obtenidos:
+
+- 69 pruebas aprobadas
+- cobertura total de 94.88 %
+- Ruff sin errores
+- mypy sin errores
+- `GET /health` se mantuvo estable y sin dependencia de base de datos
+- `GET /metrics` validado con salida `text/plain`
+- `uptime` y contadores por ruta validados en integración
+- no se requirieron migraciones ni cambios de esquema para cerrar RF-7

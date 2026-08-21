@@ -1,7 +1,10 @@
+from time import perf_counter
 from typing import Final
 
 from fastapi import FastAPI, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
 
 from app.exceptions import (
     AlertNotFoundError,
@@ -16,6 +19,7 @@ from app.exceptions import (
     SensorNotFoundError,
     UnsupportedSensorTypeError,
 )
+from app.monitoring import service_metrics
 from app.routers.alerts import router as alerts_router
 from app.routers.readings import router as readings_router
 from app.routers.sensors import router as sensors_router
@@ -31,6 +35,39 @@ app = FastAPI(                                                          # Creaci
     version=APP_VERSION,
     description="API REST para administrar sensores y sus lecturas",
 )
+
+
+# Registramos métricas básicas por petición sin convertir /health en una operación pesada
+@app.middleware("http")
+async def collect_basic_metrics(
+    request: Request,
+    call_next: RequestResponseEndpoint,
+) -> Response:
+
+    start_time = perf_counter()
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        service_metrics.record_request(
+            method=request.method,
+            path=request.url.path,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            duration_seconds=perf_counter() - start_time,
+        )
+        raise
+
+    route = request.scope.get("route")
+    path = route.path if route is not None and hasattr(route, "path") else request.url.path
+
+    service_metrics.record_request(
+        method=request.method,
+        path=path,
+        status_code=response.status_code,
+        duration_seconds=perf_counter() - start_time,
+    )
+
+    return response
 
 # Registro de routers
 # Incorporamos los endpoints de sensores y lecturas a la aplicación principal
@@ -205,6 +242,26 @@ def health_check() -> dict[str, str]:
         "service": APP_TITLE,
         "version": APP_VERSION,
     }
+
+
+# Endpoint de métricas
+@app.get(
+    "/metrics",
+    summary="Exponer métricas básicas del servicio",
+    description=(
+        "Devuelve métricas básicas del proceso y de las peticiones HTTP "
+        "en formato de texto plano"
+    ),
+    tags=["Sistema"],
+    response_class=PlainTextResponse,
+    status_code=status.HTTP_200_OK,
+)
+def metrics() -> PlainTextResponse:
+
+    return PlainTextResponse(
+        content=service_metrics.render_prometheus(),
+        media_type="text/plain; version=0.0.4",
+    )
 
 
 #==========[     Manejadores de errores de reglas físicas     ]==========
