@@ -481,3 +481,45 @@ Resultados obtenidos:
 - coexistencia confirmada de pruebas unitarias y de integración
 - umbral de cobertura `>= 80 %` respetado por el proyecto
 - no se requirieron migraciones ni cambios de esquema para cerrar RNF-2
+
+## RNF-4 — Contenedores, PostgreSQL y migraciones
+
+Se establece que el proyecto debe mantener Docker, Docker Compose, PostgreSQL y Alembic, y que las migraciones deben validarse sobre PostgreSQL real preservando el historial razonablemente. La auditoría realizada al estado final del proyecto mostró que este requisito ya estaba cubierto por la infraestructura existente y por las validaciones recientes ejecutadas durante el cierre de la Semana 6.
+
+### Consulta realizada a la IA
+
+Se solicitó apoyo para auditar RNF-4 después de cerrar los cambios funcionales y no funcionales principales, con el fin de confirmar si aún existía alguna brecha real en contenedores, migraciones o validación contra PostgreSQL.
+
+La IA identificó el siguiente resultado de auditoría:
+
+- existe un `Dockerfile` multi-stage para construir y ejecutar SensorHub
+- `docker-compose.yml` define la API y PostgreSQL con `healthcheck`
+- `start.sh` aplica `alembic upgrade head` antes de iniciar Uvicorn
+- Alembic mantiene un único head actual
+- el smoke real contra PostgreSQL ya fue validado de nuevo el viernes 21 de agosto de 2026 durante RNF-3
+
+Se decidió no modificar archivos de infraestructura porque no apareció ninguna brecha demostrable frente al requisito.
+
+### Decisión final
+
+Se mantiene la infraestructura actual:
+
+- contenedor de aplicación mediante `Dockerfile`
+- entorno local completo mediante `docker-compose.yml`
+- migraciones administradas por Alembic
+- validación real contra PostgreSQL como parte del smoke test del pipeline
+
+### Resultado verificado
+
+Se verificó el requisito mediante auditoría de archivos, comprobación de `alembic heads` y una ejecución real del smoke con PostgreSQL el viernes 21 de agosto de 2026.
+Resultados obtenidos:
+
+- 71 pruebas aprobadas
+- cobertura total de 94.76 %
+- Ruff sin errores
+- mypy sin errores
+- `python -m alembic heads` confirmó un único head: `6f8a9b0c1d2e`
+- `Dockerfile` multi-stage presente y vigente
+- `docker-compose.yml` mantiene PostgreSQL con `healthcheck`
+- smoke real validado sobre PostgreSQL con migraciones, creación de sensor, persistencia de lectura, `/health` y `/metrics`
+- no se requirieron migraciones nuevas ni cambios de esquema para cerrar RNF-4
