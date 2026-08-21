@@ -45,3 +45,17 @@ class ReadingResponse(BaseModel):                                   # Representa
     sensor_id: int                                                  # Identificador del sensor propietario de la lectura
     value: float                                                    # Valor numérico registrado por el sensor
     timestamp: datetime                                             # Fecha y hora en la que la lectura fue almacenada
+
+
+# Estadísticas agregadas de lecturas para un sensor
+class ReadingStatisticsResponse(BaseModel):
+
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+    sensor_id: int
+    count: int
+    minimum_value: float | None
+    maximum_value: float | None
+    average_value: float | None

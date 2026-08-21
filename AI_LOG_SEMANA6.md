@@ -189,3 +189,45 @@ Resultados obtenidos:
 - transición `open -> acknowledged` validada en PostgreSQL real
 - listado de alertas activas validado en integración y PostgreSQL real
 - transición inválida rechazada con HTTP `409`
+
+## RF-6 — Estadísticas por sensor y periodo
+
+Se establece que debe existir una consulta de estadísticas por sensor y periodo que incluya al menos mínimo, máximo y promedio, manteniendo la lógica dentro de la arquitectura en capas y sin depender directamente de FastAPI. La implementación existente no ofrecía ningún contrato, servicio, repositorio ni endpoint para este comportamiento.
+
+### Consulta realizada a la IA
+
+Se solicitó apoyo para auditar RF-6 después de cerrar RF-5, determinar si existía alguna base reutilizable y aplicar el cambio mínimo con TDD, manteniendo las validaciones temporales coherentes con la consulta paginada de lecturas.
+
+La IA identificó que RF-6 estaba faltante por completo:
+
+- no existía método de servicio para estadísticas
+- no existía contrato de repositorio para agregación
+- no existía endpoint HTTP para consultar estadísticas
+- no existían pruebas unitarias ni de integración para el requisito
+
+Se propuso encapsular el resultado agregado en un objeto de dominio `ReadingStatistics`, reutilizar las mismas validaciones temporales ya existentes para lecturas y delegar la agregación al repositorio de lecturas para preservar la separación entre servicio y persistencia.
+
+### Decisión final
+
+Se adoptó el siguiente comportamiento:
+
+- `GET /sensors/{sensor_id}/readings/stats` devuelve estadísticas agregadas para un sensor
+- el endpoint acepta `from` y `to` como rango temporal opcional e inclusivo
+- la respuesta expone `count`, `minimum_value`, `maximum_value` y `average_value`
+- si el sensor existe pero no hay lecturas en el rango, la API devuelve `count = 0` y agregados `null`
+- el servicio reutiliza la validación temporal ya aplicada en la consulta paginada
+- la agregación se resuelve en el repositorio mediante funciones SQL y sigue siendo testeable con un fake repository en memoria
+
+### Resultado verificado
+
+Se verificó el comportamiento mediante pruebas unitarias, integración HTTP y regresión completa del proyecto.
+Resultados obtenidos:
+
+- 68 pruebas aprobadas
+- cobertura total de 94.84 %
+- Ruff sin errores
+- mypy sin errores
+- `pytest tests/test_reading_statistics_service.py tests/integration/test_readings_api.py -q` en verde
+- estadísticas con rango temporal validadas en servicio e integración
+- contrato de estadísticas vacías validado con `count = 0` y agregados `null`
+- no se requirieron migraciones ni cambios de esquema para cerrar RF-6

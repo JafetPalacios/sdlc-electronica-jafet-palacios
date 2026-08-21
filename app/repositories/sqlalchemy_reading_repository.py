@@ -1,8 +1,9 @@
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.domain.reading_statistics import ReadingStatistics
 from app.models import Reading
 from app.repositories.reading_repository import ReadingRepository
 
@@ -70,6 +71,46 @@ class SqlAlchemyReadingRepository(ReadingRepository):
         )
 
         return list(self._db.scalars(statement).all())              # Ejecutamos la consulta y convertimos el resultado en una lista
+
+    # Operaciones de agregación por sensor: Calculamos estadísticas dentro de un rango temporal opcional
+    def get_statistics_for_sensor(
+        self,
+        sensor_id: int,
+        *,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> ReadingStatistics:
+
+        statement = select(
+            func.count(Reading.id),
+            func.min(Reading.value),
+            func.max(Reading.value),
+            func.avg(Reading.value),
+        ).where(
+            Reading.sensor_id == sensor_id,
+        )
+
+        if start_date is not None:
+            statement = statement.where(
+                Reading.timestamp >= start_date,
+            )
+
+        if end_date is not None:
+            statement = statement.where(
+                Reading.timestamp <= end_date,
+            )
+
+        count, minimum_value, maximum_value, average_value = self._db.execute(
+            statement,
+        ).one()
+
+        return ReadingStatistics(
+            sensor_id=sensor_id,
+            count=int(count),
+            minimum_value=float(minimum_value) if minimum_value is not None else None,
+            maximum_value=float(maximum_value) if maximum_value is not None else None,
+            average_value=float(average_value) if average_value is not None else None,
+        )
 
     # Operaciones de actualización: Confirmamos los cambios realizados previamente sobre una entidad administrada por la sesión actual
     def update(self, reading: Reading) -> Reading:

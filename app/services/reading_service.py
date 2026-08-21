@@ -2,6 +2,7 @@ from datetime import datetime
 
 from app.domain.alert_lifecycle import AlertStatus
 from app.domain.alert_strategy import AlertStrategy
+from app.domain.reading_statistics import ReadingStatistics
 from app.domain.sensor_rules import SENSOR_RULES
 from app.exceptions import (
     InvalidDateRangeError,
@@ -62,6 +63,37 @@ class ReadingService:
                 minimum_value=rule.minimum_value,
                 maximum_value=rule.maximum_value,
             )
+
+    # Validación reutilizable de rangos temporales
+    def _validate_date_range_filters(
+        self,
+        *,
+        start_date: datetime | None,
+        end_date: datetime | None,
+    ) -> None:
+
+        if start_date is not None and end_date is not None:
+            start_is_aware = start_date.utcoffset() is not None
+            end_is_aware = end_date.utcoffset() is not None
+
+            if start_is_aware != end_is_aware:
+                raise InvalidDateTimezoneError()
+
+            if start_date > end_date:
+                raise InvalidDateRangeError()
+
+    # Recuperación reutilizable del sensor propietario
+    def _get_sensor_or_raise(
+        self,
+        sensor_id: int,
+    ) -> object:
+
+        sensor = self._sensor_repository.get_by_id(sensor_id)
+
+        if sensor is None:
+            raise SensorNotFoundError(sensor_id)
+
+        return sensor
 
 
     # Creación de lecturas
@@ -148,22 +180,12 @@ class ReadingService:
         if limit < 1 or limit > 100 or offset < 0:
             raise InvalidPaginationError()
 
-        if start_date is not None and end_date is not None:
-            # Comprobamos que ambas fechas utilicen el mismo tratamiento de zona horaria
-            start_is_aware = start_date.utcoffset() is not None
-            end_is_aware = end_date.utcoffset() is not None
+        self._validate_date_range_filters(
+            start_date=start_date,
+            end_date=end_date,
+        )
 
-            if start_is_aware != end_is_aware:
-                raise InvalidDateTimezoneError()
-
-            # Validamos la coherencia del rango después de descartar combinaciones incompatibles
-            if start_date > end_date:
-                raise InvalidDateRangeError()
-
-        sensor = self._sensor_repository.get_by_id(sensor_id)                   # Comprobamos que el sensor solicitado exista aunque no tenga lecturas
-
-        if sensor is None:                                                      # Diferenciamos entre un sensor inexistente y un sensor sin resultados
-            raise SensorNotFoundError(sensor_id)
+        self._get_sensor_or_raise(sensor_id)                                    # Comprobamos que el sensor solicitado exista aunque no tenga lecturas
 
 
         return self._reading_repository.list_for_sensor(                        # Delegamos al repositorio los filtros, el orden y la paginación
@@ -172,6 +194,28 @@ class ReadingService:
             end_date=end_date,
             limit=limit,
             offset=offset,
+        )
+
+    # Estadísticas agregadas por sensor
+    def get_statistics_for_sensor(
+        self,
+        sensor_id: int,
+        *,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> ReadingStatistics:
+
+        self._validate_date_range_filters(
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        self._get_sensor_or_raise(sensor_id)
+
+        return self._reading_repository.get_statistics_for_sensor(
+            sensor_id,
+            start_date=start_date,
+            end_date=end_date,
         )
 
     # Actualización de lecturas

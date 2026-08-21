@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Protocol
 
+from app.domain.reading_statistics import ReadingStatistics
 from app.models import Reading
 
 
@@ -31,6 +32,18 @@ class ReadingRepository(Protocol):
         limit: int = 50,
         offset: int = 0,
     ) -> list[Reading]:                             # Listamos lecturas de un sensor aplicando filtros y paginación
+
+        ...
+
+    # Operaciones de agregación por sensor
+    # Recuperamos estadísticas de lecturas aplicando opcionalmente un rango temporal
+    def get_statistics_for_sensor(
+        self,
+        sensor_id: int,
+        *,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> ReadingStatistics:
 
         ...
 

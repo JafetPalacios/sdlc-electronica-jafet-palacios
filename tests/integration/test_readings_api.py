@@ -317,6 +317,74 @@ def test_list_readings_filters_by_date_range_and_paginates_deterministically(
         },
     ]
 
+
+# Verificamos estadísticas agregadas por sensor y periodo
+def test_get_reading_statistics_for_sensor(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    sensor = create_sensor(client)
+    sensor_id = sensor["id"]
+
+    db_session.add_all(
+        [
+            Reading(
+                sensor_id=sensor_id,
+                value=10.0,
+                timestamp=datetime(2026, 8, 20, 10, 0, 0),
+            ),
+            Reading(
+                sensor_id=sensor_id,
+                value=20.0,
+                timestamp=datetime(2026, 8, 20, 11, 0, 0),
+            ),
+            Reading(
+                sensor_id=sensor_id,
+                value=30.0,
+                timestamp=datetime(2026, 8, 20, 12, 0, 0),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = client.get(
+        (
+            f"/sensors/{sensor_id}/readings/stats"
+            "?from=2026-08-20T10:30:00"
+            "&to=2026-08-20T12:00:00"
+        ),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == {
+        "sensor_id": sensor_id,
+        "count": 2,
+        "minimum_value": 20.0,
+        "maximum_value": 30.0,
+        "average_value": 25.0,
+    }
+
+
+# Verificamos estadísticas vacías para un sensor existente sin lecturas en el rango
+def test_get_reading_statistics_returns_empty_aggregates_when_no_matches(
+    client: TestClient,
+) -> None:
+    sensor = create_sensor(client)
+    sensor_id = sensor["id"]
+
+    response = client.get(
+        f"/sensors/{sensor_id}/readings/stats",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == {
+        "sensor_id": sensor_id,
+        "count": 0,
+        "minimum_value": None,
+        "maximum_value": None,
+        "average_value": None,
+    }
+
 # Verificamos que un rango temporal incoherente produzca HTTP 400
 def test_list_readings_with_invalid_date_range_returns_400(
     client: TestClient,
