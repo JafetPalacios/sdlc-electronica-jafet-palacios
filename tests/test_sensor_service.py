@@ -17,6 +17,7 @@ def test_create_sensor_success() -> None:                                   # Ve
     sensor_data = SensorCreate(                                             # Definimos los datos de entrada que normalmente recibiríamos desde la API
         code="TEMP-001",
         name="Sensor de temperatura",
+        location="Laboratorio de electrónica",
         sensor_type="temperature",
         unit="°C",
     )
@@ -47,6 +48,7 @@ def test_create_sensor_duplicate_code() -> None:                            # Ve
         SensorCreate(
             code="TEMP-001",
             name="Sensor 1",
+            location="Laboratorio de electrónica",
             sensor_type="temperature",
             unit="°C",
         )
@@ -61,6 +63,7 @@ def test_create_sensor_duplicate_code() -> None:                            # Ve
             SensorCreate(
                 code="TEMP-001",
                 name="Sensor 2",
+                location="Laboratorio de electrónica",
                 sensor_type="temperature",
                 unit="°C",
             )
@@ -83,6 +86,7 @@ def test_list_sensors() -> None:                                        # Verifi
         SensorCreate(
             code="TEMP-001",
             name="Sensor 1",
+            location="Laboratorio de electrónica",
             sensor_type="temperature",
             unit="°C",
         )
@@ -93,6 +97,7 @@ def test_list_sensors() -> None:                                        # Verifi
         SensorCreate(
             code="TEMP-002",
             name="Sensor 2",
+            location="Laboratorio de electrónica",
             sensor_type="temperature",
             unit="°C",
         )
@@ -116,6 +121,7 @@ def test_create_sensor_with_alert_threshold() -> None:
     sensor_data = SensorCreate(
         code="TEMP-ALERT-001",
         name="Sensor de temperatura con alerta",
+        location="Laboratorio de electrónica",
         sensor_type="temperature",
         unit="°C",
         alert_threshold=30.0,
@@ -136,6 +142,7 @@ def test_update_sensor_alert_threshold() -> None:
         SensorCreate(
             code="TEMP-ALERT-002",
             name="Sensor de temperatura",
+            location="Laboratorio de electrónica",
             sensor_type="temperature",
             unit="°C",
             alert_threshold=30.0,
@@ -151,3 +158,106 @@ def test_update_sensor_alert_threshold() -> None:
     )
 
     assert updated_sensor.alert_threshold == 35.0
+
+
+# Creación de sensor con ubicación
+def test_create_sensor_with_location() -> None:
+    # Preparar un repositorio aislado y el servicio bajo prueba
+    repository = FakeSensorRepository()
+    service = SensorService(repository)
+
+    # Solicitar la creación de un sensor indicando su ubicación física
+    sensor_data = SensorCreate(
+        code="TEMP-LOCATION-001",
+        name="Sensor de temperatura",
+        location="Laboratorio de electrónica",
+        sensor_type="temperature",
+        unit="°C",
+    )
+
+    created_sensor = service.create_sensor(sensor_data)
+
+    # Verificar que la ubicación forme parte del estado persistido del sensor
+    assert created_sensor.location == "Laboratorio de electrónica"
+
+# Creación de sensor activo por defecto
+def test_create_sensor_is_active_by_default() -> None:
+    # Preparar un repositorio aislado y el servicio bajo prueba
+    repository = FakeSensorRepository()
+    service = SensorService(repository)
+
+    # Crear un sensor sin indicar explícitamente su estado
+    sensor_data = SensorCreate(
+        code="TEMP-ACTIVE-001",
+        name="Sensor de temperatura",
+        location="Laboratorio de electrónica",
+        sensor_type="temperature",
+        unit="°C",
+    )
+
+    created_sensor = service.create_sensor(sensor_data)
+
+    # Verificar que todo sensor nuevo comience habilitado para operar
+    assert created_sensor.is_active is True
+
+# Desactivación de sensor
+def test_update_sensor_can_deactivate_sensor() -> None:
+    # Preparar un repositorio aislado y el servicio bajo prueba
+    repository = FakeSensorRepository()
+    service = SensorService(repository)
+
+    # Crear un sensor activo que posteriormente será deshabilitado
+    sensor = service.create_sensor(
+        SensorCreate(
+            code="TEMP-DEACTIVATE-001",
+            name="Sensor de temperatura",
+            location="Laboratorio de electrónica",
+            sensor_type="temperature",
+            unit="°C",
+        )
+    )
+
+    assert sensor.is_active is True
+
+    # Solicitar únicamente el cambio de estado operativo
+    updated_sensor = service.update_sensor(
+        sensor.id,
+        SensorUpdate(
+            is_active=False,
+        ),
+    )
+
+    # Verificar que el sensor permanezca almacenado pero quede inactivo
+    assert updated_sensor.is_active is False
+
+    persisted_sensor = repository.get_by_id(sensor.id)
+
+    assert persisted_sensor is not None
+    assert persisted_sensor.is_active is False
+
+# Actualización de la ubicación del sensor
+def test_update_sensor_location() -> None:
+    # Preparar un sensor existente con una ubicación inicial
+    repository = FakeSensorRepository()
+    service = SensorService(repository)
+
+    sensor = service.create_sensor(
+        SensorCreate(
+            code="TEMP-LOCATION-UPDATE-001",
+            name="Sensor de temperatura",
+            location="Laboratorio de electrónica",
+            sensor_type="temperature",
+            unit="°C",
+        )
+    )
+
+    # Solicitar únicamente el cambio de ubicación física
+    updated_sensor = service.update_sensor(
+        sensor.id,
+        SensorUpdate(
+            location="Laboratorio de instrumentación",
+        ),
+    )
+
+    # Verificar que la nueva ubicación quede conservada
+    assert updated_sensor.location == "Laboratorio de instrumentación"

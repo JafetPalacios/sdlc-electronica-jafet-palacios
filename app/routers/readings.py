@@ -4,7 +4,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 
 from app.dependencies import get_reading_service
-from app.schemas import ReadingCreate, ReadingResponse, ReadingUpdate
+from app.schemas import (
+    ReadingCreate,
+    ReadingResponse,
+    ReadingStatisticsResponse,
+    ReadingUpdate,
+)
 from app.services.reading_service import ReadingService
 
 # Configuración del router
@@ -76,6 +81,10 @@ EndDateQuery = Annotated[
         },
         status.HTTP_422_UNPROCESSABLE_CONTENT: {
             "description": "El identificador o el valor recibido no son válidos",
+        },
+
+                status.HTTP_409_CONFLICT: {
+            "description": "El sensor existe pero está inactivo",
         },
     },
 )
@@ -201,6 +210,44 @@ def list_readings_for_sensor(
         ReadingResponse.model_validate(reading)
         for reading in readings
     ]
+
+
+# Estadísticas agregadas por sensor: Calculamos métricas para un periodo opcional sin exponer detalles de persistencia
+@router.get(
+    "/sensors/{sensor_id}/readings/stats",
+    response_model=ReadingStatisticsResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Obtener estadísticas de lecturas por sensor",
+    description=(
+        "Calcula estadísticas agregadas para las lecturas del sensor "
+        "dentro de un rango temporal opcional"
+    ),
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "La fecha inicial es posterior a la fecha final",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "description": "El sensor solicitado no existe",
+        },
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {
+            "description": "Los parámetros recibidos no son válidos",
+        },
+    },
+)
+def get_statistics_for_sensor(
+    sensor_id: int,
+    service: ReadingServiceDependency,
+    start_date: StartDateQuery = None,
+    end_date: EndDateQuery = None,
+) -> ReadingStatisticsResponse:
+
+    statistics = service.get_statistics_for_sensor(
+        sensor_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    return ReadingStatisticsResponse.model_validate(statistics)
 
 
 # Eliminación de lecturas: Eliminamos una lectura concreta y respondemos sin cuerpo cuando la operación termina correctamente

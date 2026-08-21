@@ -37,8 +37,3 @@ class SensorRepository(Protocol):
     def update(self, sensor: Sensor) -> Sensor:
 
         ...
-
-    # Operaciones de eliminación: Eliminamos de forma definitiva un sensor almacenado
-    def delete(self, sensor: Sensor) -> None:
-
-        ...

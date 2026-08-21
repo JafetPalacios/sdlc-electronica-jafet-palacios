@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from typing import cast
 
 from fastapi import status
@@ -5,7 +6,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Alert
+from app.domain.alert_lifecycle import AlertStatus
+from app.domain.alert_strategy import AlertSeverity
+from app.models import Alert, Reading
 
 
 # Pruebas de integración para lecturas
@@ -15,6 +18,7 @@ def create_sensor(
     *,
     code: str = "HUM-001",
     name: str = "Sensor de humedad",
+    location: str = "Laboratorio de electrónica",
     sensor_type: str = "humidity",
     unit: str = "%",
 ) -> dict[str, object]:
@@ -24,6 +28,7 @@ def create_sensor(
         json={
             "code": code,
             "name": name,
+            "location": location,
             "sensor_type": sensor_type,
             "unit": unit,
         },
@@ -184,6 +189,202 @@ def test_list_readings_for_sensor_success(
     assert response_data[0]["value"] == 30.0
     assert response_data[1]["value"] == 60.0
 
+
+# Verificamos un orden estable cuando varias lecturas comparten el mismo timestamp
+def test_list_readings_orders_by_timestamp_and_id_when_timestamps_match(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    sensor = create_sensor(client)
+    sensor_id = sensor["id"]
+
+    shared_timestamp = datetime(
+        2026,
+        8,
+        20,
+        10,
+        0,
+        0,
+    )
+
+    db_session.add_all(
+        [
+            Reading(
+                sensor_id=sensor_id,
+                value=10.0,
+                timestamp=shared_timestamp,
+            ),
+            Reading(
+                sensor_id=sensor_id,
+                value=20.0,
+                timestamp=shared_timestamp,
+            ),
+            Reading(
+                sensor_id=sensor_id,
+                value=30.0,
+                timestamp=shared_timestamp,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    expected_readings = list(
+        db_session.scalars(
+            select(Reading)
+            .where(
+                Reading.sensor_id == sensor_id,
+            )
+            .order_by(
+                Reading.id,
+            ),
+        ).all()
+    )
+
+    response = client.get(
+        f"/sensors/{sensor_id}/readings",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+
+    response_data = response.json()
+
+    assert [reading["id"] for reading in response_data] == [
+        reading.id
+        for reading in expected_readings
+    ]
+    assert [reading["value"] for reading in response_data] == [
+        10.0,
+        20.0,
+        30.0,
+    ]
+
+
+# Verificamos el filtro temporal inclusivo combinado con paginación determinista
+def test_list_readings_filters_by_date_range_and_paginates_deterministically(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    sensor = create_sensor(client)
+    sensor_id = sensor["id"]
+
+    base_timestamp = datetime(
+        2026,
+        8,
+        20,
+        12,
+        0,
+        0,
+    )
+
+    db_session.add_all(
+        [
+            Reading(
+                sensor_id=sensor_id,
+                value=10.0,
+                timestamp=base_timestamp,
+            ),
+            Reading(
+                sensor_id=sensor_id,
+                value=20.0,
+                timestamp=base_timestamp + timedelta(seconds=1),
+            ),
+            Reading(
+                sensor_id=sensor_id,
+                value=30.0,
+                timestamp=base_timestamp + timedelta(seconds=2),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = client.get(
+        (
+            f"/sensors/{sensor_id}/readings"
+            "?from=2026-08-20T12:00:00"
+            "&to=2026-08-20T12:00:01"
+            "&limit=1"
+            "&offset=1"
+        ),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == [
+        {
+            "id": 2,
+            "sensor_id": sensor_id,
+            "value": 20.0,
+            "timestamp": "2026-08-20T12:00:01",
+        },
+    ]
+
+
+# Verificamos estadísticas agregadas por sensor y periodo
+def test_get_reading_statistics_for_sensor(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    sensor = create_sensor(client)
+    sensor_id = sensor["id"]
+
+    db_session.add_all(
+        [
+            Reading(
+                sensor_id=sensor_id,
+                value=10.0,
+                timestamp=datetime(2026, 8, 20, 10, 0, 0),
+            ),
+            Reading(
+                sensor_id=sensor_id,
+                value=20.0,
+                timestamp=datetime(2026, 8, 20, 11, 0, 0),
+            ),
+            Reading(
+                sensor_id=sensor_id,
+                value=30.0,
+                timestamp=datetime(2026, 8, 20, 12, 0, 0),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = client.get(
+        (
+            f"/sensors/{sensor_id}/readings/stats"
+            "?from=2026-08-20T10:30:00"
+            "&to=2026-08-20T12:00:00"
+        ),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == {
+        "sensor_id": sensor_id,
+        "count": 2,
+        "minimum_value": 20.0,
+        "maximum_value": 30.0,
+        "average_value": 25.0,
+    }
+
+
+# Verificamos estadísticas vacías para un sensor existente sin lecturas en el rango
+def test_get_reading_statistics_returns_empty_aggregates_when_no_matches(
+    client: TestClient,
+) -> None:
+    sensor = create_sensor(client)
+    sensor_id = sensor["id"]
+
+    response = client.get(
+        f"/sensors/{sensor_id}/readings/stats",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == {
+        "sensor_id": sensor_id,
+        "count": 0,
+        "minimum_value": None,
+        "maximum_value": None,
+        "average_value": None,
+    }
+
 # Verificamos que un rango temporal incoherente produzca HTTP 400
 def test_list_readings_with_invalid_date_range_returns_400(
     client: TestClient,
@@ -309,6 +510,7 @@ def test_create_reading_above_threshold_persists_alert(
         json={
             "code": "TEMP-ALERT-READING-001",
             "name": "Sensor de temperatura con alerta",
+            "location": "Laboratorio de electrónica",
             "sensor_type": "temperature",
             "unit": "°C",
             "alert_threshold": 30.0,
@@ -346,3 +548,89 @@ def test_create_reading_above_threshold_persists_alert(
     assert alert.reading_id == reading_id
     assert alert.value == 31.0
     assert alert.threshold == 30.0
+    assert alert.severity == AlertSeverity.WARNING
+    assert alert.status == AlertStatus.OPEN
+
+
+# Generación persistente de alerta crítica desde el flujo HTTP de lecturas
+def test_create_reading_far_above_threshold_persists_critical_alert(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    # Registramos un sensor con un umbral activo
+    sensor_response = client.post(
+        "/sensors/",
+        json={
+            "code": "TEMP-ALERT-CRITICAL-READING-001",
+            "name": "Sensor de temperatura con alerta crítica",
+            "location": "Laboratorio de electrónica",
+            "sensor_type": "temperature",
+            "unit": "°C",
+            "alert_threshold": 30.0,
+        },
+    )
+
+    assert sensor_response.status_code == status.HTTP_201_CREATED
+
+    sensor_id = sensor_response.json()["id"]
+
+    # Registramos una lectura que excede ampliamente el umbral
+    reading_response = client.post(
+        f"/sensors/{sensor_id}/readings",
+        json={
+            "value": 36.0,
+        },
+    )
+
+    assert reading_response.status_code == status.HTTP_201_CREATED
+
+    alerts = list(
+        db_session.scalars(
+            select(Alert),
+        ).all()
+    )
+
+    assert len(alerts) == 1
+    assert alerts[0].severity == AlertSeverity.CRITICAL
+    assert alerts[0].status == AlertStatus.OPEN
+
+# Rechazo HTTP de lecturas para sensores inactivos
+def test_create_reading_for_inactive_sensor_returns_409(
+    client: TestClient,
+) -> None:
+    # Crear un sensor activo mediante la API
+    sensor = create_sensor(
+        client,
+        code="TEMP-INACTIVE-API-001",
+        name="Sensor de temperatura inactivo",
+        location="Laboratorio de electrónica",
+        sensor_type="temperature",
+        unit="°C",
+    )
+
+    sensor_id = sensor["id"]
+
+    # Desactivar el sensor antes de intentar registrar telemetría
+    deactivate_response = client.patch(
+        f"/sensors/{sensor_id}",
+        json={
+            "is_active": False,
+        },
+    )
+
+    assert deactivate_response.status_code == status.HTTP_200_OK
+    assert deactivate_response.json()["is_active"] is False
+
+    # Intentar registrar una nueva lectura sobre el sensor desactivado
+    response = client.post(
+        f"/sensors/{sensor_id}/readings",
+        json={
+            "value": 25.0,
+        },
+    )
+
+    # Verificar que el estado actual del sensor impida la operación
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert response.json() == {
+        "detail": f"El sensor con id {sensor_id} está inactivo",
+    }

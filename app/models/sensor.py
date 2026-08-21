@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import Boolean, DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -37,6 +37,12 @@ class Sensor(Base):
         nullable=False,
     )
 
+    # Ubicación física del sensor
+    location: Mapped[str] = mapped_column(                     # Conservar el lugar donde se encuentra instalado el dispositivo
+        String(150),
+        nullable=False,
+    )
+
     # Tipo de sensor
     sensor_type: Mapped[str] = mapped_column(               # Indicamos la magnitud o categoría medida como temperatura o humedad
         String(30),
@@ -64,4 +70,11 @@ class Sensor(Base):
     # Umbral opcional para detección de anomalías
     alert_threshold: Mapped[float | None] = mapped_column(
         nullable=True,
+    )
+
+    # Estado operativo del sensor
+    is_active: Mapped[bool] = mapped_column(                 # Indicar si el sensor está habilitado para recibir nuevas lecturas
+        Boolean,
+        default=True,
+        nullable=False,
     )

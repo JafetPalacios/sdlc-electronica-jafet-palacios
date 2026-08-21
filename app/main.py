@@ -1,19 +1,26 @@
+from time import perf_counter
 from typing import Final
 
 from fastapi import FastAPI, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
 
 from app.exceptions import (
+    AlertNotFoundError,
+    InvalidAlertStatusTransitionError,
     InvalidDateRangeError,
     InvalidDateTimezoneError,
     InvalidSensorUnitError,
     ReadingNotFoundError,
     ReadingValueOutOfRangeError,
     SensorCodeConflictError,
-    SensorHasReadingsError,
+    SensorInactiveError,
     SensorNotFoundError,
     UnsupportedSensorTypeError,
 )
+from app.monitoring import service_metrics
+from app.observability import log_event
 from app.routers.alerts import router as alerts_router
 from app.routers.readings import router as readings_router
 from app.routers.sensors import router as sensors_router
@@ -29,6 +36,65 @@ app = FastAPI(                                                          # Creaci
     version=APP_VERSION,
     description="API REST para administrar sensores y sus lecturas",
 )
+
+
+# Registramos métricas básicas por petición sin convertir /health en una operación pesada
+@app.middleware("http")
+async def collect_basic_metrics(
+    request: Request,
+    call_next: RequestResponseEndpoint,
+) -> Response:
+
+    start_time = perf_counter()
+    client_ip = request.client.host if request.client is not None else None
+
+    try:
+        response = await call_next(request)
+    except Exception as error:
+        duration_seconds = perf_counter() - start_time
+        duration_ms = round(duration_seconds * 1000, 3)
+
+        service_metrics.record_request(
+            method=request.method,
+            path=request.url.path,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            duration_seconds=duration_seconds,
+        )
+
+        log_event(
+            "http_request_failed",
+            method=request.method,
+            path=request.url.path,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            duration_ms=duration_ms,
+            client_ip=client_ip,
+            error_type=type(error).__name__,
+        )
+
+        raise
+
+    route = request.scope.get("route")
+    path = route.path if route is not None and hasattr(route, "path") else request.url.path
+    duration_seconds = perf_counter() - start_time
+    duration_ms = round(duration_seconds * 1000, 3)
+
+    service_metrics.record_request(
+        method=request.method,
+        path=path,
+        status_code=response.status_code,
+        duration_seconds=duration_seconds,
+    )
+
+    log_event(
+        "http_request_completed",
+        method=request.method,
+        path=path,
+        status_code=response.status_code,
+        duration_ms=duration_ms,
+        client_ip=client_ip,
+    )
+
+    return response
 
 # Registro de routers
 # Incorporamos los endpoints de sensores y lecturas a la aplicación principal
@@ -72,17 +138,53 @@ async def handle_sensor_code_conflict(
         },
     )
 
-
-# Convertimos una eliminación bloqueada en una respuesta HTTP 409
-@app.exception_handler(SensorHasReadingsError)
-async def handle_sensor_has_readings(
+# Convertir un sensor inactivo en una respuesta HTTP 409
+@app.exception_handler(SensorInactiveError)
+async def handle_sensor_inactive(
     request: Request,
-    exc: SensorHasReadingsError,
+    exc: SensorInactiveError,
+) -> JSONResponse:
+    # Conservar la petición disponible para futuras tareas de trazabilidad
+    _ = request
+
+    # Informar que el recurso existe pero su estado impide registrar lecturas
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={
+            "detail": str(exc),
+        },
+    ) 
+
+
+#==========[     Manejadores de errores de alertas     ]==========
+
+# Convertimos una alerta inexistente en una respuesta HTTP 404
+@app.exception_handler(AlertNotFoundError)
+async def handle_alert_not_found(
+    request: Request,
+    exc: AlertNotFoundError,
 ) -> JSONResponse:
 
-    _ = request                                                             # Conservamos la petición disponible para futuras tareas de trazabilidad
+    _ = request
 
-    return JSONResponse(                                                    # Informamos que el sensor no puede eliminarse por sus relaciones existentes
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={
+            "detail": str(exc),
+        },
+    )
+
+
+# Convertimos una transición inválida de alerta en una respuesta HTTP 409
+@app.exception_handler(InvalidAlertStatusTransitionError)
+async def handle_invalid_alert_status_transition(
+    request: Request,
+    exc: InvalidAlertStatusTransitionError,
+) -> JSONResponse:
+
+    _ = request
+
+    return JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
         content={
             "detail": str(exc),
@@ -167,6 +269,26 @@ def health_check() -> dict[str, str]:
         "service": APP_TITLE,
         "version": APP_VERSION,
     }
+
+
+# Endpoint de métricas
+@app.get(
+    "/metrics",
+    summary="Exponer métricas básicas del servicio",
+    description=(
+        "Devuelve métricas básicas del proceso y de las peticiones HTTP "
+        "en formato de texto plano"
+    ),
+    tags=["Sistema"],
+    response_class=PlainTextResponse,
+    status_code=status.HTTP_200_OK,
+)
+def metrics() -> PlainTextResponse:
+
+    return PlainTextResponse(
+        content=service_metrics.render_prometheus(),
+        media_type="text/plain; version=0.0.4",
+    )
 
 
 #==========[     Manejadores de errores de reglas físicas     ]==========

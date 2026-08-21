@@ -1,11 +1,10 @@
 name: CI
 
-# Ejecutamos el pipeline en pushes a main, en la rama de Semana 4 y en cualquier pull request
+# Ejecutamos el pipeline en pushes a main y en cualquier pull request
 on:
   push:
     branches:
       - main
-      - feature/semana4-devops
 
   pull_request:
 
@@ -140,6 +139,8 @@ jobs:
       - name: Ejecutar smoke test funcional con PostgreSQL
         run: |
           python - <<'PY'
+          from alembic.config import Config
+          from alembic.script import ScriptDirectory
           from fastapi.testclient import TestClient
           from sqlalchemy import inspect, text
 
@@ -155,30 +156,46 @@ jobs:
                   text("SELECT version_num FROM alembic_version")
               ).scalar_one()
 
+          expected_revision = ScriptDirectory.from_config(
+              Config("alembic.ini")
+          ).get_current_head()
+
           # Comprobamos que las tablas principales fueron creadas por las migraciones
           tables = set(inspect(engine).get_table_names())
 
-          assert revision == "ccdeecc8c528"
+          assert expected_revision is not None
+          assert revision == expected_revision
           assert {"alembic_version", "sensors", "readings", "alerts"} <= tables
 
-          # Ejecutamos un flujo funcional real contra PostgreSQL
+          # Ejecutar un flujo funcional real contra PostgreSQL
           with TestClient(app) as client:
-              # Creamos un sensor de humedad mediante la API
+              # Comprobar que la API arranca y expone el health check liviano
+              health_response = client.get("/health")
+
+              assert health_response.status_code == 200
+
+              # Crear un sensor de humedad mediante la API
               sensor_response = client.post(
                   "/sensors/",
                   json={
                       "code": "SMOKE-HUM-001",
                       "name": "Sensor smoke PostgreSQL",
+                      "location": "CI PostgreSQL",
                       "sensor_type": "humidity",
                       "unit": "%",
                   },
               )
 
+              # Verificar el contrato actualizado del sensor
               assert sensor_response.status_code == 201
+
               sensor = sensor_response.json()
               sensor_id = sensor["id"]
 
-              # Registramos una lectura válida para el sensor creado
+              assert sensor["location"] == "CI PostgreSQL"
+              assert sensor["is_active"] is True
+
+              # Registrar una lectura válida para el sensor creado
               reading_response = client.post(
                   f"/sensors/{sensor_id}/readings",
                   json={
@@ -190,7 +207,7 @@ jobs:
               reading = reading_response.json()
               reading_id = reading["id"]
 
-              # Consultamos nuevamente la lectura para verificar persistencia
+              # Consultar nuevamente la lectura para verificar persistencia
               get_reading_response = client.get(
                   f"/readings/{reading_id}",
               )
@@ -201,14 +218,22 @@ jobs:
               assert persisted_reading["sensor_id"] == sensor_id
               assert persisted_reading["value"] == 55.0
 
+              # Confirmar que la API expone métricas básicas después del tráfico HTTP
+              metrics_response = client.get("/metrics")
+
+              assert metrics_response.status_code == 200
+              assert metrics_response.headers["content-type"].startswith("text/plain")
+              assert "sensorhub_uptime_seconds " in metrics_response.text
+
           print("PostgreSQL smoke test funcional correcto")
           print(f"Alembic revision: {revision}")
+          print(f"Alembic head esperado: {expected_revision}")
           print(f"Sensor creado: {sensor_id}")
           print(f"Lectura creada y consultada: {reading_id}")
           print(f"Tablas: {sorted(tables)}")
           PY
-  production-gate:
-    # Registramos el entorno de producción únicamente después de validar CI en main
+  deploy-production:
+    # Desplegamos a producción únicamente después de validar CI en main
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     needs:
@@ -217,14 +242,124 @@ jobs:
       - smoke-postgres
 
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     environment:
       name: production
 
+    env:
+      PRODUCTION_HEALTHCHECK_URL: ${{ vars.PRODUCTION_HEALTHCHECK_URL }}
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+
     steps:
-      # Confirmamos que todos los controles previos finalizaron correctamente
-      - name: Registrar validación de producción
+      # Comprobamos que el entorno tenga la configuración necesaria para desplegar
+      - name: Validar variables de despliegue
         run: |
-          echo "CI validado para producción"
-          echo "Rama: $GITHUB_REF_NAME"
-          echo "Commit: $GITHUB_SHA"
+          test -n "$RENDER_API_KEY" || { echo "Falta configurar RENDER_API_KEY"; exit 1; }
+          test -n "$RENDER_SERVICE_ID" || { echo "Falta configurar RENDER_SERVICE_ID"; exit 1; }
+
+      # Lanzamos un despliegue real sobre el servicio de Render
+      - name: Iniciar despliegue en Render
+        id: render-deploy
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          api_key = os.environ["RENDER_API_KEY"]
+          service_id = os.environ["RENDER_SERVICE_ID"]
+
+          request = urllib.request.Request(
+              url=f"https://api.render.com/v1/services/{service_id}/deploys",
+              data=b"{}",
+              headers={
+                  "Accept": "application/json",
+                  "Authorization": f"Bearer {api_key}",
+                  "Content-Type": "application/json",
+              },
+              method="POST",
+          )
+
+          with urllib.request.urlopen(request, timeout=30) as response:
+              payload = json.load(response)
+
+          deploy_id = payload["id"]
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"deploy_id={deploy_id}\n")
+
+          print(f"Deploy de Render iniciado: {deploy_id}")
+          PY
+
+      # Esperamos a que Render confirme el despliegue del commit actual
+      - name: Esperar despliegue en Render
+        env:
+          RENDER_DEPLOY_ID: ${{ steps.render-deploy.outputs.deploy_id }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.request
+
+          api_key = os.environ["RENDER_API_KEY"]
+          service_id = os.environ["RENDER_SERVICE_ID"]
+          deploy_id = os.environ["RENDER_DEPLOY_ID"]
+
+          request_url = (
+              f"https://api.render.com/v1/services/{service_id}/deploys/{deploy_id}"
+          )
+          failure_statuses = {"build_failed", "canceled", "deactivated", "failed", "update_failed"}
+          deadline = time.time() + 900
+          last_status = None
+
+          while time.time() < deadline:
+              request = urllib.request.Request(
+                  url=request_url,
+                  headers={
+                      "Accept": "application/json",
+                      "Authorization": f"Bearer {api_key}",
+                  },
+              )
+
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  payload = json.load(response)
+
+              status = payload["status"]
+
+              if status != last_status:
+                  print(f"Estado actual del deploy {deploy_id}: {status}")
+                  last_status = status
+
+              if status == "live":
+                  print(f"Deploy {deploy_id} disponible en producción")
+                  break
+
+              if status in failure_statuses:
+                  raise SystemExit(f"El deploy {deploy_id} terminó con estado no válido: {status}")
+
+              time.sleep(15)
+          else:
+              raise SystemExit(f"Tiempo de espera agotado para el deploy {deploy_id}")
+          PY
+
+      # Verificamos el health check público después del despliegue
+      - name: Validar health check de producción
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          url = os.environ.get("PRODUCTION_HEALTHCHECK_URL") or "https://sensorhub-api-clx6.onrender.com/health"
+
+          with urllib.request.urlopen(url, timeout=30) as response:
+              payload = json.load(response)
+
+          assert payload["status"] == "ok"
+          print(f"Health check público validado en {url}")
+          print(json.dumps(payload, ensure_ascii=True))
+          PY

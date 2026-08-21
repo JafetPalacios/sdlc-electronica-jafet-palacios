@@ -22,6 +22,13 @@ class SensorCreate(BaseModel):
         examples=["Sensor de temperatura del laboratorio"],
     )
 
+    # Ubicación física
+    location: str = Field(                                    # Identificar el lugar donde se encuentra instalado el sensor
+        min_length=1,
+        max_length=150,
+        examples=["Laboratorio de electrónica"],
+    )
+
     # Tipo de sensor
     sensor_type: str = Field(                               # Indicamos la categoría o magnitud física asociada al dispositivo como temperatura, humedad o presión
         min_length=1,
@@ -85,9 +92,36 @@ class SensorUpdate(BaseModel):
         examples=[35.0],
     )
 
+    # Estado operativo
+    is_active: bool | None = Field(                       # Permitir activar o desactivar un sensor mediante PATCH
+        default=None,
+        description="Indica si el sensor está habilitado para recibir nuevas lecturas",
+        examples=[False],
+    )
+
+    # Ubicación física actualizada
+    location: str | None = Field(                         # Permitir modificar el lugar donde se encuentra instalado el sensor
+        default=None,
+        min_length=1,
+        max_length=150,
+        examples=["Laboratorio de instrumentación"],
+    )
+
+    @field_validator("is_active")
+    @classmethod
+    def reject_null_is_active(cls, value: bool | None) -> bool:
+        # Rechazar null cuando el cliente envía explícitamente el estado
+        if value is None:
+            raise ValueError(
+                "El estado activo de un sensor no puede ser nulo"
+            )
+
+        return value
+
     @field_validator(
         "code",
         "name",
+        "location",
         "sensor_type",
         "unit",
     )
@@ -117,6 +151,8 @@ class SensorResponse(BaseModel):                                # Representamos 
     name: str                                                   # Nombre descriptivo utilizado para reconocer el sensor
     sensor_type: str                                            # Categoría o magnitud física asociada al sensor
     unit: str                                                   # Unidad utilizada para interpretar sus lecturas
+    location: str                                               # Exponer la ubicación física registrada para el sensor
+    is_active: bool                                             # Indicar si el sensor está habilitado para recibir nuevas lecturas
 
         # Umbral superior configurado para detectar anomalías en las lecturas
     alert_threshold: float | None

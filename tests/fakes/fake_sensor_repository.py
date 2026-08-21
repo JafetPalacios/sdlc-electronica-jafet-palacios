@@ -59,8 +59,3 @@ class FakeSensorRepository(SensorRepository):                                   
     def update(self, sensor: Sensor) -> Sensor:                                             # Los sensores almacenados son los mismos objetos utilizados por el servicio por ello los cambios ya están reflejados en memoria cuando llegamos aquí
 
         return sensor
-
-    # Eliminación de sensores
-    def delete(self, sensor: Sensor) -> None:                                               # Retiramos de la colección la misma instancia que recibió el servicio
-
-        self._sensors.remove(sensor)                                                        # Quitamos el sensor de la colección utilizada por las pruebas

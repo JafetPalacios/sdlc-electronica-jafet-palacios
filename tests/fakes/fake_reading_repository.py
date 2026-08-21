@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from app.domain.reading_statistics import ReadingStatistics
 from app.models import Reading
 from app.repositories.reading_repository import ReadingRepository
 
@@ -18,6 +19,7 @@ class FakeReadingRepository(ReadingRepository):
         # Registramos llamadas relevantes para comprobar que el servicio
         # detenga una operación antes de delegarla cuando corresponda
         self.list_for_sensor_calls = 0
+        self.statistics_calls = 0
         self.delete_calls = 0
 
     # Simulamos la creación y los valores que normalmente generaría la base de datos
@@ -85,6 +87,59 @@ class FakeReadingRepository(ReadingRepository):
         )
 
         return readings[offset : offset + limit]
+
+    # Calculamos estadísticas en memoria aplicando el mismo filtrado temporal del contrato
+    def get_statistics_for_sensor(
+        self,
+        sensor_id: int,
+        *,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> ReadingStatistics:
+
+        self.statistics_calls += 1
+
+        readings = [
+            reading
+            for reading in self._readings
+            if reading.sensor_id == sensor_id
+        ]
+
+        if start_date is not None:
+            readings = [
+                reading
+                for reading in readings
+                if reading.timestamp >= start_date
+            ]
+
+        if end_date is not None:
+            readings = [
+                reading
+                for reading in readings
+                if reading.timestamp <= end_date
+            ]
+
+        values = [
+            reading.value
+            for reading in readings
+        ]
+
+        if not values:
+            return ReadingStatistics(
+                sensor_id=sensor_id,
+                count=0,
+                minimum_value=None,
+                maximum_value=None,
+                average_value=None,
+            )
+
+        return ReadingStatistics(
+            sensor_id=sensor_id,
+            count=len(values),
+            minimum_value=min(values),
+            maximum_value=max(values),
+            average_value=sum(values) / len(values),
+        )
 
     # Devolvemos la misma entidad porque las modificaciones ocurren sobre el objeto en memoria
     def update(self, reading: Reading) -> Reading:

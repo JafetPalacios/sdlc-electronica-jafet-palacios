@@ -168,37 +168,3 @@ def update_sensor(
     )
 
     return SensorResponse.model_validate(sensor)                        # Convertimos la entidad actualizada al esquema público de respuesta
-
-
-# Eliminación de sensores: Eliminamos un sensor únicamente cuando no conserva lecturas asociada. Esta restricción evita perder información histórica relacionada
-@router.delete(
-    "/{sensor_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Eliminar un sensor",
-    description=(
-        "Elimina definitivamente un sensor existente únicamente cuando "
-        "no conserva lecturas asociadas"
-    ),
-    responses={
-        status.HTTP_204_NO_CONTENT: {
-            "description": "El sensor fue eliminado correctamente",
-        },
-        status.HTTP_404_NOT_FOUND: {
-            "description": "El sensor solicitado no existe",
-        },
-        status.HTTP_409_CONFLICT: {
-            "description": "El sensor conserva lecturas y no puede eliminarse",
-        },
-        status.HTTP_422_UNPROCESSABLE_CONTENT: {
-            "description": "El identificador recibido no tiene un formato válido",
-        },
-    },
-)
-def delete_sensor(
-    sensor_id: int,
-    service: SensorServiceDependency,
-) -> None:
-
-    # El servicio comprueba que el sensor exista y que no tenga lecturas
-    # Si ambas condiciones se cumplen delega la eliminación al repositorio
-    service.delete_sensor(sensor_id)

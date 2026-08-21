@@ -1,3 +1,6 @@
+from app.domain.alert_lifecycle import AlertStatus
+
+
 # Excepciones base del dominio
 # Definimos una jerarquía común para representar errores propios de SensorHub
 # Esto permite distinguir fallos de negocio de errores técnicos o de infraestructura
@@ -26,16 +29,48 @@ class SensorCodeConflictError(SensorHubError):
             f"Ya existe un sensor con el código {code}"
         )
 
-# Indicamos que un sensor no puede eliminarse porque conserva lecturas
-class SensorHasReadingsError(SensorHubError):
+# Indicar que un sensor existe pero no está habilitado para recibir nuevas lecturas
+class SensorInactiveError(SensorHubError):
 
-    def __init__(self, sensor_id: int) -> None:                         # Construimos el error con el identificador del sensor relacionado
+    def __init__(self, sensor_id: int) -> None:
+        # Conservar el identificador para facilitar pruebas y trazabilidad
+        self.sensor_id = sensor_id
 
-        self.sensor_id = sensor_id                                      # Conservamos el identificador para facilitar pruebas y trazabilidad
+        # Explicar que el estado operativo impide registrar nuevas lecturas
+        super().__init__(
+            f"El sensor con id {sensor_id} está inactivo"
+        )
 
-        super().__init__(                                               # Explicamos por qué la operación de eliminación fue rechazada
-            f"No se puede eliminar el sensor con id {sensor_id} "
-            "porque tiene lecturas asociadas"
+
+# Excepciones relacionadas con alertas
+class AlertNotFoundError(SensorHubError):
+
+    def __init__(self, alert_id: int) -> None:
+
+        self.alert_id = alert_id
+
+        super().__init__(
+            f"No existe una alerta con id {alert_id}"
+        )
+
+
+# Indicamos que la transición solicitada no respeta el ciclo de vida definido
+class InvalidAlertStatusTransitionError(SensorHubError):
+
+    def __init__(
+        self,
+        alert_id: int,
+        current_status: AlertStatus,
+        new_status: AlertStatus,
+    ) -> None:
+
+        self.alert_id = alert_id
+        self.current_status = current_status
+        self.new_status = new_status
+
+        super().__init__(
+            f"No se puede cambiar la alerta {alert_id} de "
+            f"{current_status.value} a {new_status.value}"
         )
 
 # Excepciones relacionadas con lecturas: # Agrupamos aquí los errores propios de las operaciones sobre lecturas
