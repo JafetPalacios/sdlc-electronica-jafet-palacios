@@ -1,210 +1,138 @@
-## Semblanza
-Mi nombre es Jafet de los Angeles Palacios Guatzozón
-Actualmente, soy estudiante de último semestre de Ingeniería Biomédica y pasante en el laboratorio de Robótica Médica y Bioseñales del Instituto Politecnico Nacional (IPN). Previamente, inicié estudiando Instrumentación Electrónica pero cambié de carrera en 2023. 
-Tengo experiencia en electrónica y programación. He trabajado con microcontroladores, sensores, comunicación de datos, desarrollo de software y lenguajes como C, C#, Python y un poco de Java. También he participado en proyectos relacionados con instrumentación biomédica, análisis de señales, sistemas IoT y visualización 3D. 
-Ademas de mi experiencia técnica, he desarrollado habilidades de liderazgo y organización como presidenta de la Rama Estudiantil IEEE FIE-UV, he participando en la coordinación de eventos académicos, impartido talleres, concursos tecnológicos y actividades de divulgación científica. 
-Del programa EDSIA espero fortalecer mis conocimientos en programación, pruebas, documentación y desarrollo estructurado de proyectos. Mi objetivo es mejorar mi capacidad para crear código más confiable, seguro y eficientes, además de adquirir experiencia práctica que pueda aplicar en proyectos profesionales y de investigación.
+# SensorHub
 
+SensorHub es una API REST construida con FastAPI para administrar sensores, registrar lecturas, detectar anomalías, consultar alertas y exponer capacidades básicas de monitoreo del servicio.
 
+## Funcionalidades principales
 
-## Reflexión sobre SOLID
+- gestión de sensores con ubicación, umbral de alerta y desactivación lógica
+- ingesta de lecturas con validación física por tipo de sensor
+- consulta paginada de lecturas por rango temporal
+- detección de anomalías con severidades `WARNING` y `CRITICAL`
+- gestión de alertas activas y transición entre `open`, `acknowledged` y `resolved`
+- estadísticas por sensor y periodo con mínimo, máximo y promedio
+- endpoint `/health`, métricas básicas en `/metrics` y logs estructurados JSON
 
-Durante esta semana aplicamos los principios SOLID al dominio de sensores y al desarrollo de un driver UART modernizado.
+## Arquitectura
 
-S - El principio de responsabilidad única permitió separar la configuración, el procesamiento de mensajes, los parsers y la persistencia en clases independientes. Esto facilita comprender, probar y modificar cada componente sin afectar responsabilidades no relacionadas.
+```mermaid
+flowchart LR
+    Client[Cliente HTTP] --> Routers[FastAPI Routers]
+    Routers --> Services[Services]
+    Services --> Domain[Reglas de dominio]
+    Services --> Contracts[Repository Protocols]
+    Contracts --> Repositories[SQLAlchemy Repositories]
+    Repositories --> Database[(PostgreSQL o SQLite)]
+    Routers --> Middleware[Middleware de observabilidad]
+    Middleware --> Metrics[/metrics]
+    Middleware --> Logs[Logs JSON]
+```
 
-O - El principio abierto/cerrado se aplicó mediante la clase abstracta `MessageParser`. El dispositivo UART puede trabajar con diferentes protocolos, como Modbus y NMEA, sin modificar la implementación de `UartDevice`. Para agregar un protocolo nuevo solamente sería necesario crear otro parser que implemente el método `parse()`.
+Capas utilizadas:
 
-L - La sustitución de Liskov se cumple porque `ModbusParser` y `NMEAParser` pueden utilizarse donde se espera un `MessageParser`. Ambos respetan el mismo contrato de entrada y salida.
+- `routers`: definen contratos HTTP, parámetros, dependencias y respuestas
+- `services`: concentran reglas de negocio y coordinación entre repositorios
+- `repositories`: encapsulan persistencia y consultas SQLAlchemy
+- `models`: representan entidades persistidas
+- `domain`: contiene reglas puras como severidad de alertas, transiciones y estadísticas
 
-I - La segregación de interfaces evita que las clases dependan de operaciones que no necesitan. En el driver, el dispositivo únicamente requiere que el parser proporcione el método `parse()`.
+## Requisitos de entorno
 
-D - La inversión de dependencias se aplicó al inyectar la configuración y el parser en `UartDevice`. La clase no crea internamente un parser concreto, por lo que depende de una abstracción y no directamente de Modbus o NMEA.
+- Python `3.12`
+- PostgreSQL `16` para smoke tests reales y despliegue
+- Docker y Docker Compose para entorno local completo
 
-La principal ventaja observada es que el sistema resulta más fácil de probar y extender. Cada clase puede validarse de forma aislada y es posible incorporar nuevos protocolos o mecanismos de persistencia con cambios mínimos.
+## Variables de entorno
 
+- `DATABASE_URL`: conexión a la base de datos
+- `PORT`: puerto HTTP utilizado por el arranque en contenedor
+- `LOG_LEVEL`: nivel del logger estructurado de la API
 
----
+Si `DATABASE_URL` no está definida, el proyecto usa SQLite local en `sensorhub.db` como fallback de desarrollo.
 
-# Semana 4 - DevOps, CI/CD y despliegue de SensorHub
+## Ejecución local
 
-[![CI Semana 4](https://github.com/JafetPalacios/sdlc-electronica-jafet-palacios/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/JafetPalacios/sdlc-electronica-jafet-palacios/actions/workflows/ci.yml)
-
-Durante la Semana 4 se preparó SensorHub para ejecutarse de forma reproducible mediante contenedores, integración continua y despliegue automático
-
-La aplicación utiliza:
-
-- FastAPI para la API REST
-- SQLAlchemy para persistencia
-- Alembic para migraciones
-- PostgreSQL como base de datos
-- Docker para contenerización
-- Docker Compose para el entorno local completo
-- GitHub Actions para integración continua
-- Render para despliegue público y entrega continua
-
-### Producción
-
-SensorHub se encuentra desplegado públicamente en:
-
-https://sensorhub-api-clx6.onrender.com
-
-Endpoints principales:
-
-- Health check: https://sensorhub-api-clx6.onrender.com/health
-- Swagger UI: https://sensorhub-api-clx6.onrender.com/docs
-
-La versión desplegada actualmente es:
-
-`0.1.1`
-
-### Ejecución local con Docker
-
-1. Construir la imagen:
-
-`docker build -t sensorhub:dev .`
-
-2. Ejecutar únicamente la API:
-
-`docker run --rm -p 8000:8000 sensorhub:dev`
-
-Para el funcionamiento completo con PostgreSQL se recomienda utilizar Docker Compose
-
-### Ejecución con Docker Compose
-
-1. Crear un archivo `.env` local tomando como referencia `.env.example`
-
-2. Después levantar la aplicación y PostgreSQL:
-
-`docker compose up --build`
-
-3. La API queda disponible en:
-
-`http://localhost:8000`
-
-Endpoints locales:
-
-`http://localhost:8000/health`
-`http://localhost:8000/docs`
-
-Docker Compose espera a que PostgreSQL esté disponible antes de iniciar la API
-
-4. Durante el arranque se ejecutan automáticamente las migraciones mediante:
-
-`alembic upgrade head`
-
-### Migraciones
-
-1. Crear una nueva migración después de modificar los modelos:
-
-`alembic revision --autogenerate -m "descripcion de la migracion"`
-
-2. Aplicar todas las migraciones pendientes:
-
-`alembic upgrade head`
-
-3. Consultar la revisión actual:
-
-`alembic current`
-
-### Integración continua
-
-El workflow se encuentra en:
-
-`.github/workflows/ci.yml`
-
-El pipeline ejecuta automáticamente:
-
-Ruff
-  |
-  v
-mypy
-  |
-  v
-pytest + cobertura
-
-La cobertura mínima requerida es 80 % y la cobertura validada durante la Semana 4 fue 91.63 %. También se realizó una prueba deliberada de regresión para comprobar que GitHub Actions bloqueara un cambio defectuoso
-
-El flujo observado fue:
-
-CI verde
-    |
-    v
-regresión intencional
-    |
-    v
-CI rojo
-    |
-    v
-corrección
-    |
-    v
-CI verde
-Entrega continua
-
-Render está configurado con Auto-Deploy sobre la rama de trabajo de la Semana 4
-
-La entrega continua fue validada mediante el cambio:
-
-`SensorHub 0.1.0 -> 0.1.1`
-
-El flujo comprobado fue:
-
-git push
-    |
-    v
-GitHub Actions
-    |
-    v
-CI en verde
-    |
-    v
-Render Auto-Deploy
-    |
-    v
-producción actualizada
-
-Después del despliegue automático se verificó públicamente:
-
-{
-  "status": "ok",
-  "service": "SensorHub API",
-  "version": "0.1.1"
-}
-
-Las credenciales y datos sensibles no se almacenan directamente en el repositorio
-
-La aplicación utiliza:
-
-`DATABASE_URL`
-
-para configurar la conexión a la base de datos
-
-En desarrollo local las variables se cargan desde .env, archivo excluido del control de versiones
-
-El repositorio contiene .env.example únicamente como referencia de configuración
-
-En producción DATABASE_URL se configura directamente mediante las variables de entorno de Render
-
-
-
-## Un detalle sobre el badge
-
-He puesto explícitamente:
-
-`?branch=feature%2Fsemana4-devops`
-
-porque esa era la rama que contiene y ejecuta nuestro workflow.
-
-Eso hace que el badge represente la CI que realmente estoy entregando en ese momento. Cuando resolví el requisito final de main, cambié el badge para que represente main.
-
-## Rollback
-
-Si una versión desplegada introduce un fallo, se identifica el commit responsable y se crea un `revert` en `main`
+1. Instalar dependencias
 
 ```bash
-git switch main
-git pull --ff-only origin main
-git revert <commit_defectuoso>
-git push origin main
+python -m pip install -r requirements-dev.txt
 ```
+
+2. Aplicar migraciones
+
+```bash
+python -m alembic upgrade head
+```
+
+3. Levantar la API
+
+```bash
+python -m uvicorn app.main:app --reload
+```
+
+Endpoints útiles:
+
+- `http://localhost:8000/docs`
+- `http://localhost:8000/health`
+- `http://localhost:8000/metrics`
+
+## Ejecución con Docker Compose
+
+1. Crear `.env` a partir de `.env.example`
+2. Ajustar credenciales locales de PostgreSQL
+3. Levantar servicios
+
+```bash
+docker compose up --build
+```
+
+Durante el arranque del contenedor de la API se ejecuta:
+
+```bash
+alembic upgrade head
+```
+
+## Calidad y validaciones
+
+Validaciones principales del proyecto:
+
+```bash
+pytest
+ruff check app tests migrations
+mypy app tests migrations --ignore-missing-imports
+```
+
+La cobertura mínima exigida es `80 %`.
+
+## CI/CD
+
+El workflow de GitHub Actions ejecuta:
+
+- Ruff
+- mypy
+- pytest con cobertura
+- análisis de seguridad con Trivy
+- smoke test funcional con PostgreSQL real
+
+En cada `push` a `main`, después de pasar CI:
+
+- se inicia un despliegue real en Render mediante `RENDER_API_KEY` y `RENDER_SERVICE_ID`
+- se espera la finalización del deploy
+- se valida el health check público configurado en `PRODUCTION_HEALTHCHECK_URL`
+
+## Documentación adicional
+
+- [ADR 0001: Arquitectura en capas](docs/adr/0001-arquitectura-en-capas.md)
+- [ADR 0002: Observabilidad y monitoreo liviano](docs/adr/0002-observabilidad-y-monitoreo-liviano.md)
+- [Bitácora consolidada de Semana 6](AI_LOG_SEMANA6.md)
+
+## Endpoints de referencia
+
+- `GET /health`
+- `GET /metrics`
+- `POST /sensors/`
+- `PATCH /sensors/{sensor_id}`
+- `POST /sensors/{sensor_id}/readings`
+- `GET /sensors/{sensor_id}/readings`
+- `GET /sensors/{sensor_id}/readings/stats`
+- `GET /alerts/active`
+- `PATCH /alerts/{alert_id}`

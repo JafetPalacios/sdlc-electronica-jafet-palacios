@@ -360,3 +360,45 @@ Resultados obtenidos:
 - se añadió una prueba de integración que demuestra que `/health` dispara un evento estructurado
 - `LOG_LEVEL` agregado a `.env.example`
 - no se requirieron migraciones ni cambios de esquema para cerrar RNF-5
+
+## RNF-6 — Documentación de entrega final
+
+Se establece que la entrega debe incluir un `README` actualizado, un diagrama de arquitectura, al menos dos ADR y una bitácora consolidada del uso de IA. El repositorio ya contaba con una bitácora consolidada de Semana 6 y con un ADR sobre arquitectura en capas, pero la documentación principal seguía enfocada en Semana 4 y no representaba el estado final alcanzado en SensorHub.
+
+### Consulta realizada a la IA
+
+Se solicitó apoyo para auditar RNF-6 una vez cerrados los requisitos técnicos, determinar exactamente qué artefactos documentales seguían incompletos y actualizar únicamente la documentación viva del proyecto sin reescribir documentación histórica de semanas anteriores.
+
+La IA identificó el siguiente resultado de auditoría:
+
+- el `README` estaba desfasado respecto al alcance final de Semana 6
+- no había un diagrama actual de arquitectura en el `README`
+- sólo existía un ADR en `docs/adr`
+- la bitácora consolidada de Semana 6 sí existía y ya venía actualizándose requisito por requisito
+
+Se decidió mantener la documentación histórica de semanas anteriores intacta y concentrar el cierre de RNF-6 en tres cambios mínimos: reescribir el `README` como documento final de SensorHub, incorporar un diagrama de arquitectura en Mermaid y agregar un segundo ADR centrado en observabilidad y monitoreo liviano para alcanzar el mínimo exigido.
+
+### Decisión final
+
+Se adoptó el siguiente comportamiento documental:
+
+- el `README` ahora describe el estado final de SensorHub y no sólo la entrega de Semana 4
+- el `README` incluye un diagrama de arquitectura en Mermaid
+- el `README` documenta variables de entorno, ejecución local, Docker Compose, validaciones y CI/CD actual
+- el proyecto ahora cuenta con dos ADR aceptados
+- la bitácora consolidada de IA sigue centralizada en `AI_LOG_SEMANA6.md`
+
+### Resultado verificado
+
+Se verificó el cierre documental mediante revisión directa de archivos y una regresión completa del proyecto el viernes 21 de agosto de 2026.
+Resultados obtenidos:
+
+- 71 pruebas aprobadas
+- cobertura total de 94.76 %
+- Ruff sin errores
+- mypy sin errores
+- `README.md` actualizado al alcance final de Semana 6
+- diagrama de arquitectura agregado en `README.md`
+- segundo ADR agregado en `docs/adr/0002-observabilidad-y-monitoreo-liviano.md`
+- bitácora consolidada de IA mantenida en `AI_LOG_SEMANA6.md`
+- no se requirieron migraciones ni cambios de esquema para cerrar RNF-6
