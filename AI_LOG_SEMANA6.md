@@ -443,3 +443,41 @@ Resultados obtenidos:
 - evidencia directa de DIP mediante `Protocol` en los contratos de repositorio
 - evidencia de testabilidad sin base real mediante `FakeSensorRepository` y `FakeReadingRepository`
 - no se requirieron migraciones ni cambios de esquema para cerrar RNF-1
+
+## RNF-2 — Pruebas y cobertura
+
+Se establece que la solución debe mantener al menos `80 %` de cobertura y combinar pruebas unitarias con pruebas de integración. La auditoría realizada sobre el estado final de la suite mostró que este requisito ya estaba cumplido y además fortalecido durante el cierre incremental de los requisitos funcionales y no funcionales anteriores.
+
+### Consulta realizada a la IA
+
+Se solicitó apoyo para auditar RNF-2 al final de la Semana 6 y confirmar si todavía existía alguna brecha real en cobertura o en la variedad de tipos de prueba ejecutados por el proyecto.
+
+La IA identificó el siguiente resultado de auditoría:
+
+- la suite contiene pruebas unitarias sobre dominio, servicios, repositorios y utilidades
+- la suite contiene pruebas de integración HTTP con `TestClient`
+- la cobertura global actual supera ampliamente el umbral requerido
+- no se detectó necesidad de añadir pruebas artificiales sólo para inflar cobertura
+
+Se decidió no modificar código ni añadir nuevas pruebas para RNF-2 porque no apareció una brecha demostrable frente al requisito.
+
+### Decisión final
+
+Se mantiene el esquema actual de validación:
+
+- pruebas unitarias para reglas de negocio y componentes aislados
+- pruebas de integración para contratos HTTP y comportamiento observable
+- control automático de cobertura mediante `pytest-cov`
+
+### Resultado verificado
+
+Se verificó el requisito mediante la regresión completa del proyecto el viernes 21 de agosto de 2026.
+Resultados obtenidos:
+
+- 71 pruebas aprobadas
+- cobertura total de 94.76 %
+- Ruff sin errores
+- mypy sin errores
+- coexistencia confirmada de pruebas unitarias y de integración
+- umbral de cobertura `>= 80 %` respetado por el proyecto
+- no se requirieron migraciones ni cambios de esquema para cerrar RNF-2
