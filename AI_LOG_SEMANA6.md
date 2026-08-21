@@ -49,6 +49,44 @@ Resultados obtenidos:
 - intento de nueva lectura sobre sensor inactivo verificado con HTTP `409`
 - respuesta confirmada: `{"detail":"El sensor con id 1 está inactivo"}`
 
+## RF-3 — Consulta de lecturas
+
+Se establece que la consulta de lecturas por sensor debe soportar paginación, `limit`, `offset`, filtro por rango de fechas y un orden estable y determinista. La implementación existente ya validaba paginación, coherencia temporal y delegaba al repositorio un orden por `timestamp` e `id`, pero las pruebas no demostraban todavía los casos más sensibles del requisito: lecturas con el mismo `timestamp` y paginación combinada con filtro temporal inclusivo.
+
+### Consulta realizada a la IA
+
+Se solicitó apoyo para auditar RF-3 sin rehacer comportamiento ya implementado, identificar si existía una brecha real de funcionalidad o sólo de evidencia, y cerrar el requisito con pruebas relevantes en vez de añadir cobertura artificial.
+
+La IA identificó el siguiente resultado de auditoría:
+
+- implementación del servicio y repositorio: completa
+- cobertura existente sobre RF-3: parcial
+- brecha demostrable: no había pruebas de integración que probaran orden determinista con `timestamp` idéntico ni combinación de rango temporal inclusivo con paginación estable
+
+Se decidió no modificar la lógica de producción porque el código ya cumplía el requisito y, en cambio, añadir pruebas de integración que demostraran explícitamente ese contrato.
+
+### Decisión final
+
+Se adoptó el siguiente comportamiento verificado:
+
+- cuando varias lecturas comparten el mismo `timestamp`, la API responde ordenando por `timestamp` y `id`
+- el filtro temporal `from` y `to` es inclusivo
+- `limit` y `offset` se aplican sobre un orden estable y determinista
+- no fue necesario modificar servicio, repositorio ni router para cumplir RF-3
+
+### Resultado verificado
+
+Se verificó el comportamiento mediante nuevas pruebas de integración y una regresión completa del proyecto.
+Resultados obtenidos:
+
+- 55 pruebas aprobadas
+- cobertura total de 94.25 %
+- Ruff sin errores
+- mypy sin errores
+- se añadieron pruebas para `timestamp` idéntico con desempate por `id`
+- se añadieron pruebas para filtro temporal inclusivo combinado con `limit` y `offset`
+- no se requirieron migraciones ni cambios de esquema para cerrar RF-3
+
 ## RF-4 — Detección de anomalías con severidad
 
 Se establece que una lectura fuera del umbral configurado del sensor debe generar una alerta y que la solución debe contemplar al menos las severidades `WARNING` y `CRITICAL`. La implementación existente ya detectaba anomalías mediante una estrategia basada en umbral superior y persistía alertas, pero sólo devolvía un booleano y no tenía ninguna forma de clasificar ni almacenar la severidad resultante.

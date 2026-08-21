@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from typing import cast
 
 from fastapi import status
@@ -6,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.alert_strategy import AlertSeverity
-from app.models import Alert
+from app.models import Alert, Reading
 
 
 # Pruebas de integración para lecturas
@@ -186,6 +187,134 @@ def test_list_readings_for_sensor_success(
     assert len(response_data) == 2
     assert response_data[0]["value"] == 30.0
     assert response_data[1]["value"] == 60.0
+
+
+# Verificamos un orden estable cuando varias lecturas comparten el mismo timestamp
+def test_list_readings_orders_by_timestamp_and_id_when_timestamps_match(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    sensor = create_sensor(client)
+    sensor_id = sensor["id"]
+
+    shared_timestamp = datetime(
+        2026,
+        8,
+        20,
+        10,
+        0,
+        0,
+    )
+
+    db_session.add_all(
+        [
+            Reading(
+                sensor_id=sensor_id,
+                value=10.0,
+                timestamp=shared_timestamp,
+            ),
+            Reading(
+                sensor_id=sensor_id,
+                value=20.0,
+                timestamp=shared_timestamp,
+            ),
+            Reading(
+                sensor_id=sensor_id,
+                value=30.0,
+                timestamp=shared_timestamp,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    expected_readings = list(
+        db_session.scalars(
+            select(Reading)
+            .where(
+                Reading.sensor_id == sensor_id,
+            )
+            .order_by(
+                Reading.id,
+            ),
+        ).all()
+    )
+
+    response = client.get(
+        f"/sensors/{sensor_id}/readings",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+
+    response_data = response.json()
+
+    assert [reading["id"] for reading in response_data] == [
+        reading.id
+        for reading in expected_readings
+    ]
+    assert [reading["value"] for reading in response_data] == [
+        10.0,
+        20.0,
+        30.0,
+    ]
+
+
+# Verificamos el filtro temporal inclusivo combinado con paginación determinista
+def test_list_readings_filters_by_date_range_and_paginates_deterministically(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    sensor = create_sensor(client)
+    sensor_id = sensor["id"]
+
+    base_timestamp = datetime(
+        2026,
+        8,
+        20,
+        12,
+        0,
+        0,
+    )
+
+    db_session.add_all(
+        [
+            Reading(
+                sensor_id=sensor_id,
+                value=10.0,
+                timestamp=base_timestamp,
+            ),
+            Reading(
+                sensor_id=sensor_id,
+                value=20.0,
+                timestamp=base_timestamp + timedelta(seconds=1),
+            ),
+            Reading(
+                sensor_id=sensor_id,
+                value=30.0,
+                timestamp=base_timestamp + timedelta(seconds=2),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = client.get(
+        (
+            f"/sensors/{sensor_id}/readings"
+            "?from=2026-08-20T12:00:00"
+            "&to=2026-08-20T12:00:01"
+            "&limit=1"
+            "&offset=1"
+        ),
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == [
+        {
+            "id": 2,
+            "sensor_id": sensor_id,
+            "value": 20.0,
+            "timestamp": "2026-08-20T12:00:01",
+        },
+    ]
 
 # Verificamos que un rango temporal incoherente produzca HTTP 400
 def test_list_readings_with_invalid_date_range_returns_400(
