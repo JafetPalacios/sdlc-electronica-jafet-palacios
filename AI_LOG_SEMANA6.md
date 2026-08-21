@@ -156,7 +156,7 @@ Se adoptó una política mínima y explícita para cerrar el requisito:
 - transiciones válidas = `open -> acknowledged`, `open -> resolved`, `acknowledged -> resolved`
 - no se permiten reaperturas ni transiciones al mismo estado
 
-Durante la validación contra PostgreSQL real del viernes 21 de agosto de 2026 apareció una discrepancia no visible en SQLite: el modelo estaba persistiendo el nombre del enum (`OPEN`) mientras la migración había creado el constraint con los valores requeridos (`open`, `acknowledged`, `resolved`). Se corrigió el modelo para persistir los valores públicos del enum y se repitió la validación real hasta dejarla en verde.
+Durante la validación contra PostgreSQL real apareció una discrepancia no visible en SQLite: el modelo estaba persistiendo el nombre del enum (`OPEN`) mientras la migración había creado el constraint con los valores requeridos (`open`, `acknowledged`, `resolved`). Se corrigió el modelo para persistir los valores públicos del enum y se repitió la validación real hasta dejarla en verde.
 
 ### Decisión final
 
@@ -304,7 +304,7 @@ Se adoptó el siguiente comportamiento:
 
 ### Resultado verificado
 
-Se verificó el comportamiento mediante regresión completa local, revisión del workflow actualizado y una ejecución real del smoke test contra PostgreSQL 16 local el viernes 21 de agosto de 2026.
+Se verificó el comportamiento mediante regresión completa local, revisión del workflow actualizado y una ejecución real del smoke test contra PostgreSQL 16 local.
 Resultados obtenidos:
 
 - 69 pruebas aprobadas
@@ -349,7 +349,7 @@ Se adoptó el siguiente comportamiento:
 
 ### Resultado verificado
 
-Se verificó el comportamiento mediante pruebas unitarias, integración HTTP y regresión completa del proyecto el viernes 21 de agosto de 2026.
+Se verificó el comportamiento mediante pruebas unitarias, integración HTTP y regresión completa del proyecto.
 Resultados obtenidos:
 
 - 71 pruebas aprobadas
@@ -363,18 +363,18 @@ Resultados obtenidos:
 
 ## RNF-6 — Documentación de entrega final
 
-Se establece que la entrega debe incluir un `README` actualizado, un diagrama de arquitectura, al menos dos ADR y una bitácora consolidada del uso de IA. El repositorio ya contaba con una bitácora consolidada de Semana 6 y con un ADR sobre arquitectura en capas, pero la documentación principal seguía enfocada en Semana 4 y no representaba el estado final alcanzado en SensorHub.
+Se establece que la entrega debe incluir un `README` actualizado, un diagrama de arquitectura, al menos dos ADR y una bitácora consolidada del uso de IA. El repositorio ya contaba con una bitácora consolidada de Semana 6 y con un ADR sobre arquitectura en capas.
 
 ### Consulta realizada a la IA
 
-Se solicitó apoyo para auditar RNF-6 una vez cerrados los requisitos técnicos, determinar exactamente qué artefactos documentales seguían incompletos y actualizar únicamente la documentación viva del proyecto sin reescribir documentación histórica de semanas anteriores.
+Se solicitó apoyo para auditar RNF-6 una vez cerrados los requisitos técnicos y determinar exactamente qué artefactos documentales seguían incompletos.
 
 La IA identificó el siguiente resultado de auditoría:
 
 - el `README` estaba desfasado respecto al alcance final de Semana 6
 - no había un diagrama actual de arquitectura en el `README`
 - sólo existía un ADR en `docs/adr`
-- la bitácora consolidada de Semana 6 sí existía y ya venía actualizándose requisito por requisito
+- la bitácora consolidada de Semana 6 sí existía y ya venía actualizándose.
 
 Se decidió mantener la documentación histórica de semanas anteriores intacta y concentrar el cierre de RNF-6 en tres cambios mínimos: reescribir el `README` como documento final de SensorHub, incorporar un diagrama de arquitectura en Mermaid y agregar un segundo ADR centrado en observabilidad y monitoreo liviano para alcanzar el mínimo exigido.
 
@@ -386,11 +386,11 @@ Se adoptó el siguiente comportamiento documental:
 - el `README` incluye un diagrama de arquitectura en Mermaid
 - el `README` documenta variables de entorno, ejecución local, Docker Compose, validaciones y CI/CD actual
 - el proyecto ahora cuenta con dos ADR aceptados
-- la bitácora consolidada de IA sigue centralizada en `AI_LOG_SEMANA6.md`
+- la bitácora consolidada de IA se actualiza.
 
 ### Resultado verificado
 
-Se verificó el cierre documental mediante revisión directa de archivos y una regresión completa del proyecto el viernes 21 de agosto de 2026.
+Se verificó el cierre documental mediante revisión directa de archivos y una regresión completa del proyecto.
 Resultados obtenidos:
 
 - 71 pruebas aprobadas
@@ -433,7 +433,7 @@ Se mantiene la arquitectura actual:
 
 ### Resultado verificado
 
-Se verificó el requisito mediante auditoría de código y la regresión completa del proyecto el viernes 21 de agosto de 2026.
+Se verificó el requisito mediante auditoría de código y la regresión completa del proyecto
 Resultados obtenidos:
 
 - 71 pruebas aprobadas
@@ -471,7 +471,7 @@ Se mantiene el esquema actual de validación:
 
 ### Resultado verificado
 
-Se verificó el requisito mediante la regresión completa del proyecto el viernes 21 de agosto de 2026.
+Se verificó el requisito mediante la regresión completa del proyecto.
 Resultados obtenidos:
 
 - 71 pruebas aprobadas
@@ -496,7 +496,7 @@ La IA identificó el siguiente resultado de auditoría:
 - `docker-compose.yml` define la API y PostgreSQL con `healthcheck`
 - `start.sh` aplica `alembic upgrade head` antes de iniciar Uvicorn
 - Alembic mantiene un único head actual
-- el smoke real contra PostgreSQL ya fue validado de nuevo el viernes 21 de agosto de 2026 durante RNF-3
+- el smoke real contra PostgreSQL ya fue validado de nuevo durante RNF-3
 
 Se decidió no modificar archivos de infraestructura porque no apareció ninguna brecha demostrable frente al requisito.
 
@@ -511,7 +511,7 @@ Se mantiene la infraestructura actual:
 
 ### Resultado verificado
 
-Se verificó el requisito mediante auditoría de archivos, comprobación de `alembic heads` y una ejecución real del smoke con PostgreSQL el viernes 21 de agosto de 2026.
+Se verificó el requisito mediante auditoría de archivos, comprobación de `alembic heads` y una ejecución real del smoke con PostgreSQL.
 Resultados obtenidos:
 
 - 71 pruebas aprobadas
