@@ -318,3 +318,45 @@ Resultados obtenidos:
 - el workflow dejó de depender de una revisión Alembic fija ya obsoleta
 - el pseudo-CD basado en `echo` fue reemplazado por despliegue real a Render con espera activa y comprobación de health check
 - no se requirieron migraciones ni cambios de esquema para cerrar RNF-3
+
+## RNF-5 — Observabilidad y configuración por entorno
+
+Se establece que la aplicación debe utilizar configuración mediante variables de entorno y emitir logs estructurados. El proyecto ya tomaba `DATABASE_URL` desde el entorno y mantenía `PORT` como variable de ejecución, pero la aplicación todavía no emitía eventos estructurados propios que permitieran observar el tráfico HTTP de forma consistente.
+
+### Consulta realizada a la IA
+
+Se solicitó apoyo para auditar RNF-5 después de cerrar RNF-3, determinar si la brecha estaba en la configuración, en la observabilidad o en ambos frentes, y aplicar el cambio mínimo sin introducir nuevas dependencias.
+
+La IA identificó el siguiente resultado de auditoría:
+
+- la configuración de base de datos ya dependía de `DATABASE_URL`
+- el arranque ya respetaba `PORT`
+- no existía un logger propio de la aplicación con estructura legible por máquinas
+- no había pruebas que demostraran emisión de eventos operativos estructurados
+
+Se decidió conservar la estrategia actual de configuración por entorno y cubrir la brecha restante con una utilidad pequeña de observabilidad basada en la librería estándar. El cambio mínimo consistió en introducir serialización JSON para eventos, configurar el nivel de logs mediante `LOG_LEVEL`, registrar eventos HTTP desde el middleware existente y documentar la nueva variable en `.env.example`.
+
+### Decisión final
+
+Se adoptó el siguiente comportamiento:
+
+- la configuración sensible sigue dependiendo de variables de entorno y no de valores hardcodeados
+- la API ahora emite un evento estructurado por petición HTTP completada
+- cuando una petición falla por excepción no controlada, la API emite un evento estructurado de error
+- cada evento incluye al menos `timestamp`, `level`, `logger`, `event`, `method`, `path`, `status_code`, `duration_ms` y `client_ip`
+- el nivel del logger propio de observabilidad se controla mediante `LOG_LEVEL`
+- no se introdujeron librerías nuevas para logging estructurado
+
+### Resultado verificado
+
+Se verificó el comportamiento mediante pruebas unitarias, integración HTTP y regresión completa del proyecto el viernes 21 de agosto de 2026.
+Resultados obtenidos:
+
+- 71 pruebas aprobadas
+- cobertura total de 94.76 %
+- Ruff sin errores
+- mypy sin errores
+- se añadió una prueba unitaria para la serialización JSON de eventos
+- se añadió una prueba de integración que demuestra que `/health` dispara un evento estructurado
+- `LOG_LEVEL` agregado a `.env.example`
+- no se requirieron migraciones ni cambios de esquema para cerrar RNF-5

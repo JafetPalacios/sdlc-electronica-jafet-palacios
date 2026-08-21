@@ -20,6 +20,7 @@ from app.exceptions import (
     UnsupportedSensorTypeError,
 )
 from app.monitoring import service_metrics
+from app.observability import log_event
 from app.routers.alerts import router as alerts_router
 from app.routers.readings import router as readings_router
 from app.routers.sensors import router as sensors_router
@@ -45,26 +46,52 @@ async def collect_basic_metrics(
 ) -> Response:
 
     start_time = perf_counter()
+    client_ip = request.client.host if request.client is not None else None
 
     try:
         response = await call_next(request)
-    except Exception:
+    except Exception as error:
+        duration_seconds = perf_counter() - start_time
+        duration_ms = round(duration_seconds * 1000, 3)
+
         service_metrics.record_request(
             method=request.method,
             path=request.url.path,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            duration_seconds=perf_counter() - start_time,
+            duration_seconds=duration_seconds,
         )
+
+        log_event(
+            "http_request_failed",
+            method=request.method,
+            path=request.url.path,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            duration_ms=duration_ms,
+            client_ip=client_ip,
+            error_type=type(error).__name__,
+        )
+
         raise
 
     route = request.scope.get("route")
     path = route.path if route is not None and hasattr(route, "path") else request.url.path
+    duration_seconds = perf_counter() - start_time
+    duration_ms = round(duration_seconds * 1000, 3)
 
     service_metrics.record_request(
         method=request.method,
         path=path,
         status_code=response.status_code,
-        duration_seconds=perf_counter() - start_time,
+        duration_seconds=duration_seconds,
+    )
+
+    log_event(
+        "http_request_completed",
+        method=request.method,
+        path=path,
+        status_code=response.status_code,
+        duration_ms=duration_ms,
+        client_ip=client_ip,
     )
 
     return response
