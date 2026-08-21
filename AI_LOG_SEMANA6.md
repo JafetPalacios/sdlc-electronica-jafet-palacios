@@ -402,3 +402,44 @@ Resultados obtenidos:
 - segundo ADR agregado en `docs/adr/0002-observabilidad-y-monitoreo-liviano.md`
 - bitácora consolidada de IA mantenida en `AI_LOG_SEMANA6.md`
 - no se requirieron migraciones ni cambios de esquema para cerrar RNF-6
+
+## RNF-1 — Arquitectura en capas y DIP
+
+Se establece que la solución debe mantener una arquitectura en capas con inversión de dependencias y que la lógica de negocio debe poder probarse sin depender de una base de datos real. La auditoría realizada sobre el estado actual de SensorHub mostró que este requisito ya estaba cubierto por la estructura de código y por la suite de pruebas existente.
+
+### Consulta realizada a la IA
+
+Se solicitó apoyo para auditar RNF-1 al cierre de la Semana 6 y confirmar si aún existía alguna brecha real en la separación por capas o en la testabilidad de los servicios.
+
+La IA identificó el siguiente resultado de auditoría:
+
+- la estructura `routers -> services -> repositories -> models` se mantiene en el proyecto
+- `SensorRepository`, `ReadingRepository` y `AlertRepository` están definidos como `Protocol`
+- `dependencies.py` inyecta implementaciones concretas únicamente en el borde de FastAPI
+- la lógica principal de negocio se prueba con repositorios falsos en `tests/fakes`
+- no se encontró evidencia de que los servicios dependan directamente de FastAPI o de una base de datos real para su validación unitaria
+
+Se decidió no modificar código productivo porque no apareció ninguna brecha demostrable frente al requisito.
+
+### Decisión final
+
+Se mantiene la arquitectura actual:
+
+- `routers` para responsabilidades HTTP
+- `services` para reglas y coordinación de negocio
+- `repositories` para persistencia
+- `models` para entidades ORM
+- dependencias de servicio resueltas mediante contratos y no mediante implementaciones concretas acopladas
+
+### Resultado verificado
+
+Se verificó el requisito mediante auditoría de código y la regresión completa del proyecto el viernes 21 de agosto de 2026.
+Resultados obtenidos:
+
+- 71 pruebas aprobadas
+- cobertura total de 94.76 %
+- Ruff sin errores
+- mypy sin errores
+- evidencia directa de DIP mediante `Protocol` en los contratos de repositorio
+- evidencia de testabilidad sin base real mediante `FakeSensorRepository` y `FakeReadingRepository`
+- no se requirieron migraciones ni cambios de esquema para cerrar RNF-1
