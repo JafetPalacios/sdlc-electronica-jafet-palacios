@@ -273,3 +273,48 @@ Resultados obtenidos:
 - `GET /metrics` validado con salida `text/plain`
 - `uptime` y contadores por ruta validados en integración
 - no se requirieron migraciones ni cambios de esquema para cerrar RF-7
+
+## RNF-3 — CI/CD alineado con Semana 6
+
+Se establece que la integración continua debe ejecutar Ruff, mypy, pytest con cobertura, validaciones de seguridad y un smoke test real con PostgreSQL. Además, la entrega continua debe desplegar a producción en cada push a `main`, evitando confundir una simple marca visual o un `echo` con un despliegue real.
+
+### Consulta realizada a la IA
+
+Se solicitó apoyo para auditar el pipeline heredado de Semana 4, verificar si seguía representando correctamente el estado de Semana 6 y corregir únicamente las brechas demostrables del flujo de CI/CD.
+
+La IA identificó el siguiente resultado de auditoría:
+
+- la CI ya ejecutaba Ruff, mypy, pytest, Trivy y un smoke test con PostgreSQL
+- el trigger de `push` todavía incluía la rama histórica `feature/semana4-devops`
+- el smoke test seguía esperando explícitamente la revisión Alembic antigua `8f1f8f0a69a8`
+- el supuesto paso de producción sólo registraba un `echo` y no hacía ningún despliegue real
+
+Se decidió conservar la estructura general del workflow porque ya cubría los controles principales, pero actualizando únicamente los puntos que habían quedado obsoletos. El cambio mínimo consistió en eliminar el trigger heredado de Semana 4, calcular dinámicamente la cabeza actual de Alembic dentro del smoke test, extender ese smoke para comprobar también `/health` y `/metrics`, y sustituir `production-gate` por un despliegue real a Render mediante API con validación posterior del health check público.
+
+### Decisión final
+
+Se adoptó el siguiente comportamiento:
+
+- la CI se ejecuta en `push` a `main`, `pull_request` y `workflow_dispatch`
+- el smoke test PostgreSQL compara la revisión aplicada contra la cabeza real de Alembic en lugar de usar un valor fijo obsoleto
+- el smoke test valida arranque de la API, creación de sensor, registro de lectura y exposición de `/metrics`
+- la validación de seguridad con Trivy se mantiene sin cambios funcionales
+- el job final de `main` ahora inicia un despliegue real en Render usando `RENDER_API_KEY` y `RENDER_SERVICE_ID`
+- después del despliegue, el workflow valida el health check público de producción
+
+### Resultado verificado
+
+Se verificó el comportamiento mediante regresión completa local, revisión del workflow actualizado y una ejecución real del smoke test contra PostgreSQL 16 local el viernes 21 de agosto de 2026.
+Resultados obtenidos:
+
+- 69 pruebas aprobadas
+- cobertura total de 94.88 %
+- Ruff sin errores
+- mypy sin errores
+- smoke PostgreSQL real validado con revisión `6f8a9b0c1d2e`
+- smoke PostgreSQL real validó tablas `sensors`, `readings`, `alerts` y `alembic_version`
+- smoke PostgreSQL real validó creación de sensor, persistencia de lectura, `/health` y `/metrics`
+- el workflow dejó de depender de la rama histórica de Semana 4
+- el workflow dejó de depender de una revisión Alembic fija ya obsoleta
+- el pseudo-CD basado en `echo` fue reemplazado por despliegue real a Render con espera activa y comprobación de health check
+- no se requirieron migraciones ni cambios de esquema para cerrar RNF-3
