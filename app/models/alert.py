@@ -1,9 +1,10 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, func
+from sqlalchemy import DateTime, Enum, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
+from app.domain.alert_strategy import AlertSeverity
 
 
 # Representamos una alerta generada a partir de una lectura anómala
@@ -35,6 +36,19 @@ class Alert(Base):
 
     # Guardamos el umbral utilizado cuando se detectó la anomalía
     threshold: Mapped[float] = mapped_column(
+        nullable=False,
+    )
+
+    # Clasificamos la severidad asignada a la anomalía detectada
+    severity: Mapped[AlertSeverity] = mapped_column(
+        Enum(
+            AlertSeverity,
+            name="alertseverity",
+            native_enum=False,
+            create_constraint=True,
+            validate_strings=True,
+        ),
+        default=AlertSeverity.WARNING,
         nullable=False,
     )
 

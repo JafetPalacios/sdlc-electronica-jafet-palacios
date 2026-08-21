@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.domain.alert_strategy import AlertSeverity
 from app.models import Alert
 
 
@@ -349,6 +350,49 @@ def test_create_reading_above_threshold_persists_alert(
     assert alert.reading_id == reading_id
     assert alert.value == 31.0
     assert alert.threshold == 30.0
+    assert alert.severity == AlertSeverity.WARNING
+
+
+# Generación persistente de alerta crítica desde el flujo HTTP de lecturas
+def test_create_reading_far_above_threshold_persists_critical_alert(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    # Registramos un sensor con un umbral activo
+    sensor_response = client.post(
+        "/sensors/",
+        json={
+            "code": "TEMP-ALERT-CRITICAL-READING-001",
+            "name": "Sensor de temperatura con alerta crítica",
+            "location": "Laboratorio de electrónica",
+            "sensor_type": "temperature",
+            "unit": "°C",
+            "alert_threshold": 30.0,
+        },
+    )
+
+    assert sensor_response.status_code == status.HTTP_201_CREATED
+
+    sensor_id = sensor_response.json()["id"]
+
+    # Registramos una lectura que excede ampliamente el umbral
+    reading_response = client.post(
+        f"/sensors/{sensor_id}/readings",
+        json={
+            "value": 36.0,
+        },
+    )
+
+    assert reading_response.status_code == status.HTTP_201_CREATED
+
+    alerts = list(
+        db_session.scalars(
+            select(Alert),
+        ).all()
+    )
+
+    assert len(alerts) == 1
+    assert alerts[0].severity == AlertSeverity.CRITICAL
 
 # Rechazo HTTP de lecturas para sensores inactivos
 def test_create_reading_for_inactive_sensor_returns_409(

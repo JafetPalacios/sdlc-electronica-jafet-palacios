@@ -92,21 +92,28 @@ class ReadingService:
         # Persistir primero la lectura para disponer de su identificador definitivo
         created_reading = self._reading_repository.create(reading)
 
-        # Evaluar la lectura cuando el sensor tenga un umbral configurado
+        severity = None
+
+        # Clasificamos la lectura cuando el sensor tenga un umbral configurado
         if (
             sensor.alert_threshold is not None
-            and self._alert_repository is not None
             and self._alert_strategy is not None
-            and self._alert_strategy.is_anomaly(
+        ):
+            severity = self._alert_strategy.classify(
                 value=created_reading.value,
                 threshold=sensor.alert_threshold,
             )
+
+        if (
+            severity is not None
+            and self._alert_repository is not None
         ):
             alert = Alert(
                 sensor_id=sensor_id,
                 reading_id=created_reading.id,
                 value=created_reading.value,
                 threshold=sensor.alert_threshold,
+                severity=severity,
             )
 
             self._alert_repository.create(alert)

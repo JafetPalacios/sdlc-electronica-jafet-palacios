@@ -52,8 +52,52 @@ def test_list_alerts_for_sensor_returns_generated_alert(
     assert alert["reading_id"] == reading_id
     assert alert["value"] == 31.0
     assert alert["threshold"] == 30.0
+    assert alert["severity"] == "WARNING"
     assert alert["id"] is not None
     assert alert["created_at"] is not None
+
+
+# Consulta HTTP de una alerta crítica generada por una lectura muy alta
+def test_list_alerts_for_sensor_returns_critical_alert(
+    client: TestClient,
+) -> None:
+    # Creamos un sensor con un umbral configurado
+    sensor_response = client.post(
+        "/sensors/",
+        json={
+            "code": "TEMP-ALERT-API-CRITICAL-001",
+            "name": "Sensor de temperatura con alerta crítica",
+            "location": "Laboratorio de electrónica",
+            "sensor_type": "temperature",
+            "unit": "°C",
+            "alert_threshold": 30.0,
+        },
+    )
+
+    assert sensor_response.status_code == status.HTTP_201_CREATED
+
+    sensor_id = sensor_response.json()["id"]
+
+    # Registramos una lectura ampliamente superior al umbral
+    reading_response = client.post(
+        f"/sensors/{sensor_id}/readings",
+        json={
+            "value": 36.0,
+        },
+    )
+
+    assert reading_response.status_code == status.HTTP_201_CREATED
+
+    response = client.get(
+        f"/sensors/{sensor_id}/alerts",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+
+    alerts = response.json()
+
+    assert len(alerts) == 1
+    assert alerts[0]["severity"] == "CRITICAL"
 
 # Consulta de un sensor existente que todavía no tiene alertas
 def test_list_alerts_for_sensor_without_alerts_returns_empty_list(

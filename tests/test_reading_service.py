@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from app.domain.alert_strategy import ThresholdAlertStrategy
+from app.domain.alert_strategy import AlertSeverity, ThresholdAlertStrategy
 from app.exceptions import (
     InvalidDateTimezoneError,
     InvalidPaginationError,
@@ -175,6 +175,43 @@ def test_create_reading_above_threshold_creates_alert() -> None:
     assert alert.reading_id == reading.id
     assert alert.value == 31.0
     assert alert.threshold == 30.0
+    assert alert.severity == AlertSeverity.WARNING
+
+
+# Generación de alerta crítica al superar ampliamente el umbral configurado
+def test_create_reading_far_above_threshold_creates_critical_alert() -> None:
+    # Preparamos un sensor con un umbral activo y repositorios aislados
+    sensor_repository = FakeSensorRepository()
+    reading_repository = FakeReadingRepository()
+    alert_repository = Mock()
+
+    sensor = sensor_repository.create(
+        Sensor(
+            code="TEMP-ALERT-CRITICAL-001",
+            name="Sensor de temperatura con alerta crítica",
+            sensor_type="temperature",
+            unit="°C",
+            alert_threshold=30.0,
+        )
+    )
+
+    service = ReadingService(
+        reading_repository,
+        sensor_repository,
+        alert_repository=alert_repository,
+        alert_strategy=ThresholdAlertStrategy(),
+    )
+
+    service.create_reading(
+        sensor.id,
+        ReadingCreate(
+            value=36.0,
+        ),
+    )
+
+    alert = alert_repository.create.call_args.args[0]
+
+    assert alert.severity == AlertSeverity.CRITICAL
 
 # Rechazo de lecturas para sensores inactivos
 def test_create_reading_rejects_inactive_sensor() -> None:

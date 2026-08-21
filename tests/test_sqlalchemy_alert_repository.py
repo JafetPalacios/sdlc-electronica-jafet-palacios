@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 
+from app.domain.alert_strategy import AlertSeverity
 from app.models import Alert, Reading, Sensor
 from app.repositories.sqlalchemy_alert_repository import (
     SqlAlchemyAlertRepository,
@@ -39,6 +40,7 @@ def test_create_alert_persists_alert(
         reading_id=reading.id,
         value=31.0,
         threshold=30.0,
+        severity=AlertSeverity.WARNING,
     )
 
     repository = SqlAlchemyAlertRepository(db_session)
@@ -60,6 +62,7 @@ def test_create_alert_persists_alert(
     assert stored_alert.reading_id == reading.id
     assert stored_alert.value == 31.0
     assert stored_alert.threshold == 30.0
+    assert stored_alert.severity == AlertSeverity.WARNING
 
 # Consulta de alertas pertenecientes a un sensor
 def test_list_alerts_for_sensor_returns_only_matching_alerts(
@@ -121,6 +124,7 @@ def test_list_alerts_for_sensor_returns_only_matching_alerts(
         reading_id=first_reading.id,
         value=31.0,
         threshold=30.0,
+        severity=AlertSeverity.WARNING,
     )
 
     second_alert = Alert(
@@ -128,6 +132,7 @@ def test_list_alerts_for_sensor_returns_only_matching_alerts(
         reading_id=second_reading.id,
         value=41.0,
         threshold=40.0,
+        severity=AlertSeverity.CRITICAL,
     )
 
     repository = SqlAlchemyAlertRepository(db_session)
@@ -144,3 +149,4 @@ def test_list_alerts_for_sensor_returns_only_matching_alerts(
     assert alerts[0].reading_id == first_reading.id
     assert alerts[0].value == 31.0
     assert alerts[0].threshold == 30.0
+    assert alerts[0].severity == AlertSeverity.WARNING
