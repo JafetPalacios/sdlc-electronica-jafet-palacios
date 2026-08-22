@@ -16,15 +16,17 @@ SensorHub es una API REST construida con FastAPI para administrar sensores, regi
 
 ```mermaid
 flowchart LR
-    Client[Cliente HTTP] --> Routers[FastAPI Routers]
-    Routers --> Services[Services]
-    Services --> Domain[Reglas de dominio]
-    Services --> Contracts[Repository Protocols]
-    Contracts --> Repositories[SQLAlchemy Repositories]
-    Repositories --> Database[(PostgreSQL o SQLite)]
-    Routers --> Middleware[Middleware de observabilidad]
-    Middleware --> Metrics[/metrics]
-    Middleware --> Logs[Logs JSON]
+    Client["Cliente HTTP"] --> Middleware["Middleware de observabilidad"]
+    Middleware --> Routers["FastAPI Routers"]
+    
+    Routers --> Services["Services"]
+    Services --> Domain["Reglas de dominio"]
+    Services --> Contracts["Repository Protocols"]
+    Contracts --> Repositories["SQLAlchemy Repositories"]
+    Repositories --> Database[("PostgreSQL o SQLite")]
+    
+    Middleware --> Metrics["/metrics"]
+    Middleware --> Logs["Logs JSON"]
 ```
 
 Capas utilizadas:
